@@ -12,5 +12,41 @@ MAGNIFICATIONS = ("40", "100", "200", "400")
 
 
 class BreakHisDataset:
-    def __init__(self, root):
+    def __init__(self, root, magnification=None, transform=None):
         self.root = Path(root)
+        self.magnification = str(magnification) if magnification else None
+        self.transform = transform
+        self.samples = self._build_manifest()
+
+    def _build_manifest(self):
+        slides_root = self.root / "histology_slides" / "breast"
+        samples = []
+        for label_name, label_idx in LABEL_MAP.items():
+            class_dir = slides_root / label_name / "SOB"
+            if not class_dir.is_dir():
+                continue
+            for subtype_dir in class_dir.iterdir():
+                if not subtype_dir.is_dir():
+                    continue
+                for patient_dir in subtype_dir.iterdir():
+                    samples.extend(
+                        self._samples_for_patient(patient_dir, label_idx, subtype_dir.name)
+                    )
+        return samples
+
+    def _samples_for_patient(self, patient_dir, label_idx, subtype):
+        samples = []
+        for mag_dir in sorted(patient_dir.glob("*X")):
+            mag = mag_dir.name.rstrip("X")
+            if self.magnification and mag != self.magnification:
+                continue
+            for image_path in sorted(mag_dir.glob("*.png")):
+                samples.append(
+                    {
+                        "path": image_path,
+                        "label": label_idx,
+                        "magnification": mag,
+                        "subtype": subtype,
+                    }
+                )
+        return samples
