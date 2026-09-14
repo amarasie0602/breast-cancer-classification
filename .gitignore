@@ -10,7 +10,7 @@ venv/
 .ruff_cache/
 
 # Data & experiment artifacts
-data/
+/data/
 mlruns/
 mlartifacts/
 *.dvc.lock
