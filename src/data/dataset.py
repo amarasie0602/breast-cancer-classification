@@ -53,3 +53,6 @@ class BreakHisDataset(Dataset):
                     }
                 )
         return samples
+
+    def __len__(self):
+        return len(self.samples)
