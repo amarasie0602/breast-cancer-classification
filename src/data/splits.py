@@ -31,3 +31,7 @@ def stratified_patient_split(samples, ratios=(0.7, 0.15, 0.15), seed=42):
         test_patients.update(patients[n_train + n_val :])
 
     return train_patients, val_patients, test_patients
+
+
+def filter_samples_by_patients(samples, patients):
+    return [s for s in samples if s["path"].parent.parent.name in patients]
