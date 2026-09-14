@@ -1,7 +1,7 @@
 import pytest
 
 from src.data.dataset import BreakHisDataset
-from src.data.splits import stratified_patient_split
+from src.data.splits import filter_samples_by_patients, stratified_patient_split
 
 
 def test_split_ratios_must_sum_to_one():
@@ -19,3 +19,14 @@ def test_split_is_disjoint_and_covers_all_patients(breakhis_root):
 
     all_patients = {s["path"].parent.parent.name for s in ds.samples}
     assert train | val | test == all_patients
+
+
+def test_filter_samples_by_patients(breakhis_root):
+    ds = BreakHisDataset(breakhis_root)
+    train, val, test = stratified_patient_split(ds.samples, ratios=(0.5, 0.25, 0.25))
+
+    train_samples = filter_samples_by_patients(ds.samples, train)
+    assert all(s["path"].parent.parent.name in train for s in train_samples)
+    assert len(train_samples) + len(filter_samples_by_patients(ds.samples, val)) + len(
+        filter_samples_by_patients(ds.samples, test)
+    ) == len(ds.samples)
