@@ -21,3 +21,34 @@ def train_one_epoch(model, dataloader, optimizer, criterion, device):
         total_loss += loss.item() * images.size(0)
 
     return total_loss / len(dataloader.dataset)
+
+
+@torch.no_grad()
+def evaluate(model, dataloader, criterion, device):
+    model.eval()
+    total_loss = 0.0
+    all_preds = []
+    all_labels = []
+
+    for images, labels in dataloader:
+        images = images.to(device)
+        labels_float = labels.to(device).float().unsqueeze(1)
+
+        logits = model(images)
+        loss = criterion(logits, labels_float)
+        total_loss += loss.item() * images.size(0)
+
+        all_preds.append(logits_to_preds(logits).squeeze(1))
+        all_labels.append(labels.to(device))
+
+    preds = torch.cat(all_preds)
+    labels = torch.cat(all_labels)
+    precision, recall, f1 = precision_recall_f1(preds, labels)
+
+    return {
+        "loss": total_loss / len(dataloader.dataset),
+        "accuracy": accuracy(preds, labels),
+        "precision": precision,
+        "recall": recall,
+        "f1": f1,
+    }
