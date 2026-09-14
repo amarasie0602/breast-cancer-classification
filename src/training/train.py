@@ -110,12 +110,17 @@ def run_training(
 
 
 def main():
+    import mlflow
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--data-root", required=True)
     parser.add_argument("--magnification", required=True, choices=["40", "100", "200", "400"])
     parser.add_argument("--train-config", default="configs/train.yaml")
     parser.add_argument("--data-config", default="configs/data.yaml")
+    parser.add_argument("--mlflow-tracking-uri", default="sqlite:///mlflow.db")
     args = parser.parse_args()
+
+    mlflow.set_tracking_uri(args.mlflow_tracking_uri)
 
     train_config = load_config(args.train_config)
     data_config = load_config(args.data_config)
