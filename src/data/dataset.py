@@ -7,11 +7,14 @@ Expects the standard BreaKHis_v1 directory layout:
 
 from pathlib import Path
 
+from PIL import Image
+from torch.utils.data import Dataset
+
 LABEL_MAP = {"benign": 0, "malignant": 1}
 MAGNIFICATIONS = ("40", "100", "200", "400")
 
 
-class BreakHisDataset:
+class BreakHisDataset(Dataset):
     def __init__(self, root, magnification=None, transform=None):
         self.root = Path(root)
         self.magnification = str(magnification) if magnification else None
