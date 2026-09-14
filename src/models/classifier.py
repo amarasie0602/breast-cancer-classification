@@ -20,3 +20,12 @@ class BreakHisClassifier(nn.Module):
 
     def forward(self, x):
         return self.backbone(x)
+
+    def freeze_backbone(self):
+        for name, param in self.backbone.named_parameters():
+            if not name.startswith("fc."):
+                param.requires_grad = False
+
+    def unfreeze_backbone(self):
+        for param in self.backbone.parameters():
+            param.requires_grad = True
