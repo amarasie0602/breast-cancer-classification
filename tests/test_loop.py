@@ -1,0 +1,45 @@
+import torch
+from torch import nn, optim
+from torch.utils.data import DataLoader
+
+from src.data.dataset import BreakHisDataset
+from src.data.transforms import eval_transform
+from src.training.loop import evaluate, train_one_epoch
+
+
+class TinyModel(nn.Module):
+    """Small stand-in classifier so tests don't need a real ResNet50 download."""
+
+    def __init__(self):
+        super().__init__()
+        self.net = nn.Sequential(nn.Flatten(), nn.Linear(3 * 224 * 224, 1))
+
+    def forward(self, x):
+        return self.net(x)
+
+
+def test_train_one_epoch_reduces_loss_over_steps(breakhis_root):
+    ds = BreakHisDataset(breakhis_root, transform=eval_transform())
+    dataloader = DataLoader(ds, batch_size=4, shuffle=True)
+
+    model = TinyModel()
+    optimizer = optim.Adam(model.parameters(), lr=1e-4)
+    criterion = nn.BCEWithLogitsLoss()
+
+    first_loss = train_one_epoch(model, dataloader, optimizer, criterion, "cpu")
+    for _ in range(10):
+        train_one_epoch(model, dataloader, optimizer, criterion, "cpu")
+    last_loss = train_one_epoch(model, dataloader, optimizer, criterion, "cpu")
+
+    assert last_loss < first_loss
+
+
+def test_evaluate_returns_expected_metric_keys(breakhis_root):
+    ds = BreakHisDataset(breakhis_root, transform=eval_transform())
+    dataloader = DataLoader(ds, batch_size=4)
+
+    model = TinyModel()
+    criterion = nn.BCEWithLogitsLoss()
+
+    metrics = evaluate(model, dataloader, criterion, "cpu")
+    assert set(metrics) == {"loss", "accuracy", "precision", "recall", "f1"}
