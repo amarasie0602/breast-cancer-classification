@@ -1,0 +1,7 @@
+dataset_root: data/BreaKHis_v1
+split_ratios:
+  train: 0.7
+  val: 0.15
+  test: 0.15
+seed: 42
+magnifications: ["40", "100", "200", "400"]
