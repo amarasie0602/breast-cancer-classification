@@ -39,14 +39,22 @@ def build_dataloaders(data_root, magnification, split_ratios, seed, batch_size):
     )
 
 
-def run_training(config, data_root, magnification, split_ratios=(0.7, 0.15, 0.15), seed=42, device="cpu"):
+def run_training(
+    config,
+    data_root,
+    magnification,
+    split_ratios=(0.7, 0.15, 0.15),
+    seed=42,
+    device="cpu",
+    pretrained=True,
+):
     import mlflow
 
     train_loader, val_loader = build_dataloaders(
         data_root, magnification, split_ratios, seed, config["batch_size"]
     )
 
-    model = BreakHisClassifier().to(device)
+    model = BreakHisClassifier(pretrained=pretrained).to(device)
     criterion = nn.BCEWithLogitsLoss()
     optimizer = optim.Adam(
         model.parameters(), lr=float(config["learning_rate"]), weight_decay=float(config["weight_decay"])
