@@ -56,3 +56,10 @@ class BreakHisDataset(Dataset):
 
     def __len__(self):
         return len(self.samples)
+
+    def __getitem__(self, idx):
+        sample = self.samples[idx]
+        image = Image.open(sample["path"]).convert("RGB")
+        if self.transform:
+            image = self.transform(image)
+        return image, sample["label"]
