@@ -3,7 +3,6 @@
 import argparse
 from pathlib import Path
 
-import torch
 import yaml
 from torch import nn, optim
 from torch.utils.data import DataLoader
@@ -38,3 +37,90 @@ def build_dataloaders(data_root, magnification, split_ratios, seed, batch_size):
         DataLoader(train_ds, batch_size=batch_size, shuffle=True),
         DataLoader(val_ds, batch_size=batch_size),
     )
+
+
+def run_training(config, data_root, magnification, split_ratios=(0.7, 0.15, 0.15), seed=42, device="cpu"):
+    import mlflow
+
+    train_loader, val_loader = build_dataloaders(
+        data_root, magnification, split_ratios, seed, config["batch_size"]
+    )
+
+    model = BreakHisClassifier().to(device)
+    criterion = nn.BCEWithLogitsLoss()
+    optimizer = optim.Adam(
+        model.parameters(), lr=float(config["learning_rate"]), weight_decay=float(config["weight_decay"])
+    )
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer,
+        patience=config["lr_scheduler"]["patience"],
+        factor=config["lr_scheduler"]["factor"],
+    )
+    early_stopping = EarlyStopping(**config["early_stopping"])
+
+    checkpoint_dir = Path(config["checkpoint_dir"])
+    checkpoint_dir.mkdir(parents=True, exist_ok=True)
+    best_f1 = -1.0
+
+    with mlflow.start_run():
+        mlflow.log_params(
+            {
+                "magnification": magnification,
+                "learning_rate": config["learning_rate"],
+                "batch_size": config["batch_size"],
+                "weight_decay": config["weight_decay"],
+            }
+        )
+
+        model.freeze_backbone()
+        for epoch in range(config["epochs"]):
+            if epoch == config.get("freeze_backbone_epochs", 0):
+                model.unfreeze_backbone()
+
+            train_loss = train_one_epoch(model, train_loader, optimizer, criterion, device)
+            val_metrics = evaluate(model, val_loader, criterion, device)
+            scheduler.step(val_metrics["loss"])
+
+            mlflow.log_metric("train_loss", train_loss, step=epoch)
+            for key, value in val_metrics.items():
+                mlflow.log_metric(f"val_{key}", value, step=epoch)
+
+            if val_metrics["f1"] > best_f1:
+                best_f1 = val_metrics["f1"]
+                save_checkpoint(
+                    checkpoint_dir / f"best_mag{magnification}.pt",
+                    model,
+                    optimizer,
+                    epoch,
+                    val_metrics,
+                )
+
+            if early_stopping.step(val_metrics["loss"]):
+                break
+
+    return best_f1
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--data-root", required=True)
+    parser.add_argument("--magnification", required=True, choices=["40", "100", "200", "400"])
+    parser.add_argument("--train-config", default="configs/train.yaml")
+    parser.add_argument("--data-config", default="configs/data.yaml")
+    args = parser.parse_args()
+
+    train_config = load_config(args.train_config)
+    data_config = load_config(args.data_config)
+    ratios = data_config["split_ratios"]
+
+    run_training(
+        train_config,
+        args.data_root,
+        args.magnification,
+        split_ratios=(ratios["train"], ratios["val"], ratios["test"]),
+        seed=data_config["seed"],
+    )
+
+
+if __name__ == "__main__":
+    main()
