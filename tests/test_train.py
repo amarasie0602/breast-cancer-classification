@@ -29,3 +29,7 @@ def test_run_training_end_to_end_smoke(breakhis_root_multi_patient, tmp_path, mo
 
     assert best_f1 >= 0.0
     assert (tmp_path / "checkpoints" / "best_mag40.pt").exists()
+
+    runs = mlflow.search_runs()
+    assert runs.loc[0, "tags.magnification"] == "40"
+    assert runs.loc[0, "tags.model_variant"] == "resnet50"
