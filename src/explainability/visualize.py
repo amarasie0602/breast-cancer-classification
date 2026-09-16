@@ -14,7 +14,7 @@ def plot_gradcam_grid(images, cams, labels=None, preds=None, ncols=4):
     fig, axes = plt.subplots(nrows, ncols, figsize=(3 * ncols, 3 * nrows))
     axes = axes.flatten() if n > 1 else [axes]
 
-    for i, (image, cam) in enumerate(zip(images, cams)):
+    for i, (image, cam) in enumerate(zip(images, cams, strict=True)):
         overlay = cam_to_overlay(cam, image)
         axes[i].imshow(overlay)
         axes[i].axis("off")

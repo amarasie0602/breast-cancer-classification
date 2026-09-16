@@ -20,7 +20,7 @@ def stratified_patient_split(samples, ratios=(0.7, 0.15, 0.15), seed=42):
 
     rng = random.Random(seed)
     train_patients, val_patients, test_patients = set(), set(), set()
-    for label, patients in patients_by_label.items():
+    for patients in patients_by_label.values():
         patients = sorted(patients)
         rng.shuffle(patients)
         n = len(patients)

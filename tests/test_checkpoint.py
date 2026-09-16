@@ -16,5 +16,5 @@ def test_checkpoint_round_trip(tmp_path):
 
     assert epoch == 3
     assert metrics == {"f1": 0.9}
-    for p1, p2 in zip(model.parameters(), new_model.parameters()):
+    for p1, p2 in zip(model.parameters(), new_model.parameters(), strict=True):
         assert (p1 == p2).all()

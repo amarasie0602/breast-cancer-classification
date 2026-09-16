@@ -43,15 +43,15 @@ class BreakHisDataset(Dataset):
             mag = mag_dir.name.rstrip("X")
             if self.magnification and mag != self.magnification:
                 continue
-            for image_path in sorted(mag_dir.glob("*.png")):
-                samples.append(
-                    {
-                        "path": image_path,
-                        "label": label_idx,
-                        "magnification": mag,
-                        "subtype": subtype,
-                    }
-                )
+            samples.extend(
+                {
+                    "path": image_path,
+                    "label": label_idx,
+                    "magnification": mag,
+                    "subtype": subtype,
+                }
+                for image_path in sorted(mag_dir.glob("*.png"))
+            )
         return samples
 
     def __len__(self):

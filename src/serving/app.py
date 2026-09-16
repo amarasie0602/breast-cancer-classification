@@ -29,8 +29,8 @@ async def predict(file: UploadFile = File(...), magnification: str = Form("40"))
     image_bytes = await file.read()
     try:
         image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-    except UnidentifiedImageError:
-        raise HTTPException(status_code=400, detail="File is not a valid image")
+    except UnidentifiedImageError as e:
+        raise HTTPException(status_code=400, detail="File is not a valid image") from e
 
     if not os.path.exists(CHECKPOINT_PATH):
         raise HTTPException(status_code=503, detail="Model checkpoint not available")
