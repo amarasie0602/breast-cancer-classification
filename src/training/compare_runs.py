@@ -19,3 +19,17 @@ def build_comparison_table(tracking_uri="sqlite:///mlflow.db", experiment_name="
     ]
     table = runs[columns].sort_values("metrics.val_f1", ascending=False)
     return table.rename(columns=lambda c: c.split(".")[-1])
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--tracking-uri", default="sqlite:///mlflow.db")
+    parser.add_argument("--experiment-name", default="Default")
+    args = parser.parse_args()
+
+    table = build_comparison_table(args.tracking_uri, args.experiment_name)
+    print(table.to_string(index=False))
+
+
+if __name__ == "__main__":
+    main()
