@@ -4,9 +4,25 @@ on:
   push:
     branches: [main]
 
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/breast-cancer-classifier
+
 jobs:
-  build:
+  build-and-push:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
       - uses: actions/checkout@v4
-      - run: docker build -t breast-cancer-classifier:${{ github.sha }} .
+
+      - run: docker build -t $IMAGE:${{ github.sha }} -t $IMAGE:latest .
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - run: docker push $IMAGE:${{ github.sha }}
+      - run: docker push $IMAGE:latest
