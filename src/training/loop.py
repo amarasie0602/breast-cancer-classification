@@ -6,6 +6,9 @@ from src.training.metrics import accuracy, logits_to_preds, precision_recall_f1
 
 
 def train_one_epoch(model, dataloader, optimizer, criterion, device):
+    if len(dataloader.dataset) == 0:
+        raise ValueError("train_one_epoch received an empty dataset")
+
     model.train()
     total_loss = 0.0
     for images, labels in dataloader:
@@ -25,6 +28,9 @@ def train_one_epoch(model, dataloader, optimizer, criterion, device):
 
 @torch.no_grad()
 def evaluate(model, dataloader, criterion, device):
+    if len(dataloader.dataset) == 0:
+        raise ValueError("evaluate received an empty dataset")
+
     model.eval()
     total_loss = 0.0
     all_preds = []

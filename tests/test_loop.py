@@ -1,10 +1,19 @@
+import pytest
 import torch
 from torch import nn, optim
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
 
 from src.data.dataset import BreakHisDataset
 from src.data.transforms import eval_transform
 from src.training.loop import evaluate, train_one_epoch
+
+
+class EmptyDataset(Dataset):
+    def __len__(self):
+        return 0
+
+    def __getitem__(self, idx):
+        raise IndexError
 
 
 class TinyModel(nn.Module):
@@ -43,3 +52,22 @@ def test_evaluate_returns_expected_metric_keys(breakhis_root):
 
     metrics = evaluate(model, dataloader, criterion, "cpu")
     assert set(metrics) == {"loss", "accuracy", "precision", "recall", "f1"}
+
+
+def test_train_one_epoch_on_empty_dataset_raises_clear_error():
+    dataloader = DataLoader(EmptyDataset(), batch_size=4)
+    model = TinyModel()
+    optimizer = optim.Adam(model.parameters())
+    criterion = nn.BCEWithLogitsLoss()
+
+    with pytest.raises(ValueError, match="empty dataset"):
+        train_one_epoch(model, dataloader, optimizer, criterion, "cpu")
+
+
+def test_evaluate_on_empty_dataset_raises_clear_error():
+    dataloader = DataLoader(EmptyDataset(), batch_size=4)
+    model = TinyModel()
+    criterion = nn.BCEWithLogitsLoss()
+
+    with pytest.raises(ValueError, match="empty dataset"):
+        evaluate(model, dataloader, criterion, "cpu")
