@@ -7,3 +7,4 @@ class PredictionResponse(BaseModel):
     label: str
     probability: float
     magnification: str
+    gradcam_overlay_base64: str
