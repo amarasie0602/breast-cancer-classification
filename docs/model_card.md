@@ -37,3 +37,27 @@ correlated.
 - **No calibration guarantee.** Predicted probabilities are not verified to
   be well-calibrated; the single-logit threshold (0.5) is a default, not a
   clinically validated operating point.
+
+## Ethical Considerations
+
+- **Not a diagnostic device.** This model has not undergone clinical
+  validation, regulatory review, or comparison against pathologist
+  performance on an independent cohort. Any resemblance to a deployable
+  diagnostic tool is unintentional.
+- **False negatives carry asymmetric harm.** In a real screening context, a
+  missed malignant case is far costlier than a false alarm; this project
+  reports precision/recall/F1 separately (not just accuracy) so that
+  trade-off is visible rather than hidden behind a single number.
+- **Explainability is illustrative, not verification.** Grad-CAM overlays
+  show which regions influenced a prediction, but a plausible-looking
+  heatmap is not proof the model is reasoning about clinically relevant
+  features — it can highlight the right region for the wrong reason.
+- **Dataset consent and privacy.** BreakHis images are de-identified by the
+  original curators; no attempt is made here to re-identify patients or
+  link images to other data.
+
+## Results
+
+_To be filled in once training runs against the real dataset complete —
+see `src/training/compare_runs.py` for the per-magnification comparison
+this section will report._
