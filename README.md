@@ -9,11 +9,6 @@ BreakHis provides each sample at four magnification levels (40x, 100x, 200x,
 400x). This project evaluates the model per-magnification to compare how
 classification performance varies with zoom level.
 
-## Status
-
-Early scaffolding — data pipeline in progress. See commit history for
-incremental build-out.
-
 ## Stack
 
 - PyTorch (transfer learning backbone), Grad-CAM for explainability
