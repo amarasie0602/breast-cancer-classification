@@ -42,4 +42,21 @@ showing which region of the image drove that prediction.
 
 ## Setup
 
-Instructions will be added as the pipeline components land.
+```bash
+python -m venv .venv
+.venv/Scripts/activate  # Windows; use `source .venv/bin/activate` on macOS/Linux
+pip install -r requirements.txt
+
+# Place the BreakHis dataset at data/BreaKHis_v1/ (see data/README.md)
+
+pytest -q                        # run the test suite
+python -m src.training.train --data-root data/BreaKHis_v1 --magnification 40
+python -m src.training.compare_runs   # compare val F1 across magnifications
+uvicorn src.serving.app:app --reload  # run the API locally
+```
+
+Or via Docker:
+
+```bash
+docker compose up --build
+```
