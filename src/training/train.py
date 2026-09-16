@@ -71,6 +71,7 @@ def run_training(
     best_f1 = -1.0
 
     with mlflow.start_run():
+        mlflow.set_tags({"magnification": magnification, "model_variant": "resnet50"})
         mlflow.log_params(
             {
                 "magnification": magnification,
