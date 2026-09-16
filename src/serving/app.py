@@ -23,17 +23,16 @@ def health():
 
 @app.post("/predict", response_model=PredictionResponse)
 async def predict(file: UploadFile = File(...), magnification: str = Form("40")):
-    if not os.path.exists(CHECKPOINT_PATH):
-        raise HTTPException(status_code=503, detail="Model checkpoint not available")
-
-    model = get_model(CHECKPOINT_PATH)
-
     image_bytes = await file.read()
     try:
         image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     except UnidentifiedImageError:
         raise HTTPException(status_code=400, detail="File is not a valid image")
 
+    if not os.path.exists(CHECKPOINT_PATH):
+        raise HTTPException(status_code=503, detail="Model checkpoint not available")
+
+    model = get_model(CHECKPOINT_PATH)
     tensor = eval_transform()(image).unsqueeze(0)
 
     with torch.no_grad():
