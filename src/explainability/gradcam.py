@@ -1,6 +1,5 @@
 """Grad-CAM for visualizing which regions of a histology image drove a prediction."""
 
-import torch
 import torch.nn.functional as F
 
 
@@ -13,8 +12,21 @@ class GradCAM:
         self.activations = None
         self.gradients = None
 
-        target_layer.register_forward_hook(self._save_activations)
-        target_layer.register_full_backward_hook(self._save_gradients)
+        self._handles = [
+            target_layer.register_forward_hook(self._save_activations),
+            target_layer.register_full_backward_hook(self._save_gradients),
+        ]
+
+    def remove(self):
+        for handle in self._handles:
+            handle.remove()
+        self._handles = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.remove()
 
     def _save_activations(self, module, input, output):
         self.activations = output.detach()
