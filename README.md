@@ -1,5 +1,8 @@
 # Breast Cancer MLOps Pipeline
 
+[![CI](https://github.com/amarasie0602/breast-cancer-diagosis/actions/workflows/ci.yml/badge.svg)](https://github.com/amarasie0602/breast-cancer-diagosis/actions/workflows/ci.yml)
+[![CD](https://github.com/amarasie0602/breast-cancer-diagosis/actions/workflows/cd.yml/badge.svg)](https://github.com/amarasie0602/breast-cancer-diagosis/actions/workflows/cd.yml)
+
 Binary (benign vs. malignant) breast cancer histopathology classifier trained on
 the [BreakHis](https://web.inf.ufpr.br/vri/databases/breast-cancer-histopathological-database-breakhis/)
 dataset, with an MLOps pipeline around it: experiment tracking, data/model
