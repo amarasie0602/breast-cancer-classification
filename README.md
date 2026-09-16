@@ -80,5 +80,11 @@ the full pytest suite, a model-validation job that gates on minimum F1
 (skips gracefully if no checkpoint is present yet), and a Docker build
 check to catch container-breaking changes before merge.
 
-**CD** (`.github/workflows/cd.yml`) builds and publishes the serving image
-and deploys it on merge to `main`.
+**CD** (`.github/workflows/cd.yml`) builds the serving image and pushes it to
+GitHub Container Registry (`ghcr.io/<owner>/breast-cancer-classifier`) on
+merge to `main` — no external account needed. The final deploy step is
+gated on an optional `DEPLOY_HOOK_URL` repository secret; add a deploy-hook
+URL from Render, Railway, or a similar free-tier host to enable automatic
+deployment. Without it, the step is a no-op and the image can still be run
+locally with `docker compose up --build` or `docker run` against the
+pushed ghcr.io image.
