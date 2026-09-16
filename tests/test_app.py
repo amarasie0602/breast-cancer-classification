@@ -1,3 +1,4 @@
+import base64
 import io
 
 from fastapi.testclient import TestClient
@@ -67,3 +68,7 @@ def test_predict_happy_path_returns_valid_response(monkeypatch, tmp_path):
     assert body["label"] in ("benign", "malignant")
     assert 0.0 <= body["probability"] <= 1.0
     assert body["magnification"] == "100"
+
+    overlay_bytes = base64.b64decode(body["gradcam_overlay_base64"])
+    overlay_image = Image.open(io.BytesIO(overlay_bytes))
+    assert overlay_image.size == (64, 64)

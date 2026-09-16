@@ -1,5 +1,6 @@
 """FastAPI inference service for the BreakHis classifier."""
 
+import base64
 import io
 import os
 
@@ -8,6 +9,8 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from PIL import Image, UnidentifiedImageError
 
 from src.data.transforms import eval_transform
+from src.explainability.gradcam import GradCAM
+from src.explainability.overlay import cam_to_overlay
 from src.serving.model_loader import get_model
 from src.serving.schemas import PredictionResponse
 
@@ -40,4 +43,18 @@ async def predict(file: UploadFile = File(...), magnification: str = Form("40"))
         probability = torch.sigmoid(logit).item()
 
     label = "malignant" if probability >= 0.5 else "benign"
-    return PredictionResponse(label=label, probability=probability, magnification=magnification)
+
+    with GradCAM(model, model.backbone.layer4[-1]) as cam_extractor:
+        cam = cam_extractor(tensor.clone().requires_grad_())[0].detach().cpu().numpy()
+    overlay = cam_to_overlay(cam, image)
+
+    buf = io.BytesIO()
+    overlay.save(buf, format="PNG")
+    overlay_base64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+
+    return PredictionResponse(
+        label=label,
+        probability=probability,
+        magnification=magnification,
+        gradcam_overlay_base64=overlay_base64,
+    )
