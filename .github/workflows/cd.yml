@@ -26,3 +26,15 @@ jobs:
 
       - run: docker push $IMAGE:${{ github.sha }}
       - run: docker push $IMAGE:latest
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger deploy hook (Render/Railway) if configured
+        run: |
+          if [ -n "${{ secrets.DEPLOY_HOOK_URL }}" ]; then
+            curl -fsS -X POST "${{ secrets.DEPLOY_HOOK_URL }}"
+          else
+            echo "No DEPLOY_HOOK_URL secret set — skipping deploy. See README for how to add one."
+          fi
