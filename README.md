@@ -18,6 +18,28 @@ classification performance varies with zoom level.
 - FastAPI + Docker for serving
 - GitHub Actions for CI/CD
 
+## Architecture
+
+```
+data/BreaKHis_v1/          Raw dataset (DVC-tracked, not in Git)
+src/
+  data/                    Dataset loader, patient-level splits, augmentation, EDA helpers
+  models/                  ResNet50 transfer-learning classifier
+  training/                Train/eval loop, metrics, checkpointing, MLflow logging, CLI
+  explainability/          Grad-CAM, overlay rendering, MLflow artifact logging
+  serving/                 FastAPI inference app (predict + Grad-CAM overlay in response)
+tests/                     pytest suite (unit + integration + model validation gate)
+configs/                   YAML configs for data splits and training hyperparameters
+notebooks/                 EDA
+docs/                      Model card
+.github/workflows/         CI (lint, test, model-validation, Docker build) and CD
+```
+
+Training runs are tracked in MLflow (SQLite-backed locally); the dataset and
+best model checkpoints are versioned with DVC. The API loads a checkpoint at
+startup and returns both a benign/malignant prediction and a Grad-CAM overlay
+showing which region of the image drove that prediction.
+
 ## Setup
 
 Instructions will be added as the pipeline components land.
