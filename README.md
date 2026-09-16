@@ -88,3 +88,11 @@ URL from Render, Railway, or a similar free-tier host to enable automatic
 deployment. Without it, the step is a no-op and the image can still be run
 locally with `docker compose up --build` or `docker run` against the
 pushed ghcr.io image.
+
+## Limitations
+
+See [docs/model_card.md](docs/model_card.md) for the full breakdown. In
+short: this is a coursework/portfolio project, not a clinical tool — trained
+on a small single-institution dataset (82 patients), with known class and
+subtype imbalance, and no external validation. Grad-CAM overlays are
+illustrative, not proof the model attends to clinically meaningful features.
