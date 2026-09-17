@@ -23,6 +23,47 @@ classification performance varies with zoom level.
 
 ## Architecture
 
+The checkpoint that gets served is the same artifact the model-validation
+gate checks locally before a push — there is no separate "production
+model" step:
+
+```mermaid
+flowchart LR
+    subgraph Train["Training  (local, CPU)"]
+        DS[("BreakHis dataset<br/>DVC-tracked")] --> TR["train.py<br/>ResNet50 transfer learning"]
+        TR -->|"params + per-epoch metrics"| ML[("MLflow tracking")]
+        TR -->|"saves on F1 improvement"| CK["checkpoints/best_mag*.pt"]
+    end
+
+    CK -->|"dvc push"| REMOTE[("DVC remote<br/>(local-path, this machine)")]
+    CK -.->|"pytest, run locally<br/>gate: F1 ≥ 0.75"| GATE["model-validation"]
+    CK -->|"git push (.dvc metadata only,<br/>not the weights)"| GH[("GitHub repo")]
+
+    subgraph CI["CI — every push"]
+        GH --> LINT["lint"]
+        GH --> TEST["pytest"]
+        GH --> CIGATE["model-validation<br/>(skips: no DVC access on runner)"]
+        GH --> SMOKE["smoke-train<br/>(synthetic data)"]
+        GH --> DBUILD["docker build check"]
+    end
+
+    subgraph CD["CD — on merge to main"]
+        LINT & TEST & CIGATE & SMOKE & DBUILD -->|"all pass"| IMG["docker build & push"]
+        IMG --> GHCR[("ghcr.io image")]
+        GHCR -.->|"optional deploy hook"| HOST["Render / Railway"]
+    end
+
+    CK -->|"mounted read-only"| API["FastAPI /predict"]
+    API -->|"label + Grad-CAM overlay"| CLIENT["client"]
+```
+
+The model-validation gate is real and does enforce a minimum F1 — but
+today only where the checkpoint is actually reachable (locally, or
+anywhere with `dvc pull` access to the remote). The GitHub Actions runner
+has no credentials for this project's local-path DVC remote, so its copy
+of that job still skips; wiring a cloud DVC remote (S3/GCS) would close
+that gap.
+
 ```
 data/BreaKHis_v1/          Raw dataset (DVC-tracked, not in Git)
 src/
@@ -33,15 +74,10 @@ src/
   serving/                 FastAPI inference app (predict + Grad-CAM overlay in response)
 tests/                     pytest suite (unit + integration + model validation gate)
 configs/                   YAML configs for data splits and training hyperparameters
-notebooks/                 EDA
-docs/                      Model card
-.github/workflows/         CI (lint, test, model-validation, Docker build) and CD
+notebooks/                 EDA, error analysis
+docs/                      Model card, exported charts
+.github/workflows/         CI (lint, test, model-validation, smoke-train, Docker build) and CD
 ```
-
-Training runs are tracked in MLflow (SQLite-backed locally); the dataset and
-best model checkpoints are versioned with DVC. The API loads a checkpoint at
-startup and returns both a benign/malignant prediction and a Grad-CAM overlay
-showing which region of the image drove that prediction.
 
 ## Setup
 
