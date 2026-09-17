@@ -1,9 +1,15 @@
 """Model checkpoint save/load helpers."""
 
+from pathlib import Path
+from typing import Optional, Tuple, Union
+
 import torch
+from torch import nn, optim
 
 
-def save_checkpoint(path, model, optimizer, epoch, metrics):
+def save_checkpoint(
+    path: Union[str, Path], model: nn.Module, optimizer: optim.Optimizer, epoch: int, metrics: dict
+) -> None:
     torch.save(
         {
             "epoch": epoch,
@@ -15,7 +21,12 @@ def save_checkpoint(path, model, optimizer, epoch, metrics):
     )
 
 
-def load_checkpoint(path, model, optimizer=None, map_location="cpu"):
+def load_checkpoint(
+    path: Union[str, Path],
+    model: nn.Module,
+    optimizer: Optional[optim.Optimizer] = None,
+    map_location: str = "cpu",
+) -> Tuple[int, dict]:
     checkpoint = torch.load(path, map_location=map_location)
     model.load_state_dict(checkpoint["model_state"])
     if optimizer is not None:
