@@ -12,6 +12,7 @@ venv/
 # Data & experiment artifacts
 /data/*
 !/data/README.md
+!/data/*.dvc
 mlruns/
 mlartifacts/
 mlflow.db
