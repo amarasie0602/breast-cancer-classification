@@ -37,6 +37,11 @@ correlated.
 - **No calibration guarantee.** Predicted probabilities are not verified to
   be well-calibrated; the single-logit threshold (0.5) is a default, not a
   clinically validated operating point.
+- **Subtype-specific failure mode.** Error analysis on the 40x model found
+  its most confident mistakes concentrated almost entirely on one benign
+  subtype (`tubular_adenoma`), predicted malignant with near-certainty.
+  Overall accuracy hides this: a model can look strong in aggregate while
+  being specifically unreliable on an underrepresented subtype.
 
 ## Ethical Considerations
 
@@ -58,6 +63,41 @@ correlated.
 
 ## Results
 
-_To be filled in once training runs against the real dataset complete —
-see `src/training/compare_runs.py` for the per-magnification comparison
-this section will report._
+ResNet50, transfer learning (ImageNet-pretrained), 10 epochs with early
+stopping, patient-level 70/15/15 train/val/test split, evaluated per
+magnification. Two views are reported because they disagree in an
+instructive way:
+
+**Validation set** (used for checkpoint/model selection during training):
+
+| Magnification | Val F1 | Val Accuracy |
+| -------------- | ------ | ------------ |
+| 40x            | 0.939  | 0.918        |
+| 100x           | 0.935  | 0.917        |
+| 400x           | 0.915  | 0.886        |
+| 200x           | 0.905  | 0.878        |
+
+**Held-out test set** (never used for training or checkpoint selection —
+the honest number):
+
+| Magnification | Test F1 | Test Accuracy | Test Precision | Test Recall | Test Images |
+| -------------- | ------- | -------------- | --------------- | ----------- | ----------- |
+| 200x           | 0.952   | 0.925           | 0.916            | 0.990       | 281         |
+| 40x            | 0.901   | 0.848           | 0.838            | 0.974       | 270         |
+| 400x           | 0.882   | 0.819           | 0.796            | 0.988       | 238         |
+| 100x           | 0.861   | 0.796           | 0.841            | 0.882       | 284         |
+
+**The ranking flips between validation and test** (40x is best on val, but
+200x is best on test). With only ~11-13 patients per magnification in each
+split, this is expected sampling variance rather than a robust ordering —
+it is itself a limitation, not a bug: at this dataset size, per-magnification
+rankings should be treated as noisy, and a claim like "40x magnification is
+best for this task" is not statistically well-supported by these splits
+alone. Recall is consistently high (0.88-0.99) across all four
+magnifications, meaning the model rarely misses a malignant case in this
+sample, but precision (and therefore false-positive rate) varies more.
+
+See `notebooks/02_error_analysis.ipynb` for a concrete failure mode found
+in the 40x model: nearly all of its most confident errors are the benign
+`tubular_adenoma` subtype misclassified as malignant, not a spread of
+random mistakes.
