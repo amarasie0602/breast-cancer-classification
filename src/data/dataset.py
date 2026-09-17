@@ -6,6 +6,7 @@ Expects the standard BreaKHis_v1 directory layout:
 """
 
 from pathlib import Path
+from typing import Callable, Optional, Union
 
 from PIL import Image
 from torch.utils.data import Dataset
@@ -15,7 +16,12 @@ MAGNIFICATIONS = ("40", "100", "200", "400")
 
 
 class BreakHisDataset(Dataset):
-    def __init__(self, root, magnification=None, transform=None):
+    def __init__(
+        self,
+        root: Union[str, Path],
+        magnification: Optional[Union[str, int]] = None,
+        transform: Optional[Callable] = None,
+    ):
         self.root = Path(root)
         self.magnification = str(magnification) if magnification else None
         self.transform = transform
@@ -54,7 +60,7 @@ class BreakHisDataset(Dataset):
             )
         return samples
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.samples)
 
     def __getitem__(self, idx):
