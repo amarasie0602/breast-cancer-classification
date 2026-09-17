@@ -3,6 +3,7 @@
 import base64
 import io
 import os
+from typing import Dict
 
 import torch
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
@@ -23,17 +24,19 @@ CHECKPOINT_PATH = os.environ.get("CHECKPOINT_PATH", "checkpoints/best_mag40.pt")
 
 
 @app.get("/health")
-def health():
+def health() -> Dict[str, str]:
     return {"status": "ok"}
 
 
 @app.get("/metrics")
-def metrics():
+def metrics() -> Dict[str, Dict[str, int]]:
     return {"prediction_distribution": get_prediction_distribution()}
 
 
 @app.post("/predict", response_model=PredictionResponse)
-async def predict(file: UploadFile = File(...), magnification: str = Form("40")):
+async def predict(
+    file: UploadFile = File(...), magnification: str = Form("40")
+) -> PredictionResponse:
     image_bytes = await file.read()
     try:
         image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
