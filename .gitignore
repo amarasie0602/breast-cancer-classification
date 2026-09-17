@@ -32,7 +32,6 @@ checkpoints/
 Thumbs.db
 .vscode/
 .idea/
-.claude/
 
 # Jupyter
 .ipynb_checkpoints/
