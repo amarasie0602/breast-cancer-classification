@@ -11,10 +11,13 @@ from PIL import Image, UnidentifiedImageError
 from src.data.transforms import eval_transform
 from src.explainability.gradcam import GradCAM
 from src.explainability.overlay import cam_to_overlay
+from src.serving.logging_middleware import RequestLoggingMiddleware
+from src.serving.metrics import get_prediction_distribution, record_prediction
 from src.serving.model_loader import get_model
 from src.serving.schemas import PredictionResponse
 
 app = FastAPI(title="Breast Cancer Histopathology Classifier")
+app.add_middleware(RequestLoggingMiddleware)
 
 CHECKPOINT_PATH = os.environ.get("CHECKPOINT_PATH", "checkpoints/best_mag40.pt")
 
