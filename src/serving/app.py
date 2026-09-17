@@ -27,6 +27,11 @@ def health():
     return {"status": "ok"}
 
 
+@app.get("/metrics")
+def metrics():
+    return {"prediction_distribution": get_prediction_distribution()}
+
+
 @app.post("/predict", response_model=PredictionResponse)
 async def predict(file: UploadFile = File(...), magnification: str = Form("40")):
     image_bytes = await file.read()
@@ -46,6 +51,7 @@ async def predict(file: UploadFile = File(...), magnification: str = Form("40"))
         probability = torch.sigmoid(logit).item()
 
     label = "malignant" if probability >= 0.5 else "benign"
+    record_prediction(label)
 
     with GradCAM(model, model.backbone.layer4[-1]) as cam_extractor:
         cam = cam_extractor(tensor.clone().requires_grad_())[0].detach().cpu().numpy()
