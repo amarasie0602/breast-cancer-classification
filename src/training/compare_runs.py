@@ -3,9 +3,12 @@
 import argparse
 
 import mlflow
+import pandas as pd
 
 
-def build_comparison_table(tracking_uri="sqlite:///mlflow.db", experiment_name="Default"):
+def build_comparison_table(
+    tracking_uri: str = "sqlite:///mlflow.db", experiment_name: str = "Default"
+) -> pd.DataFrame:
     mlflow.set_tracking_uri(tracking_uri)
     runs = mlflow.search_runs(experiment_names=[experiment_name])
 
@@ -21,7 +24,7 @@ def build_comparison_table(tracking_uri="sqlite:///mlflow.db", experiment_name="
     return table.rename(columns=lambda c: c.split(".")[-1])
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--tracking-uri", default="sqlite:///mlflow.db")
     parser.add_argument("--experiment-name", default="Default")
