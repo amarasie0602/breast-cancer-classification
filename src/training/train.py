@@ -2,6 +2,7 @@
 
 import argparse
 from pathlib import Path
+from typing import Tuple, Union
 
 import yaml
 from torch import nn, optim
@@ -16,12 +17,18 @@ from src.training.early_stopping import EarlyStopping
 from src.training.loop import evaluate, train_one_epoch
 
 
-def load_config(path):
+def load_config(path: Union[str, Path]) -> dict:
     with open(path) as f:
         return yaml.safe_load(f)
 
 
-def build_dataloaders(data_root, magnification, split_ratios, seed, batch_size):
+def build_dataloaders(
+    data_root: Union[str, Path],
+    magnification: str,
+    split_ratios: Tuple[float, float, float],
+    seed: int,
+    batch_size: int,
+) -> Tuple[DataLoader, DataLoader]:
     full_ds = BreakHisDataset(data_root, magnification=magnification)
     train_patients, val_patients, _ = stratified_patient_split(
         full_ds.samples, ratios=tuple(split_ratios), seed=seed
@@ -40,14 +47,14 @@ def build_dataloaders(data_root, magnification, split_ratios, seed, batch_size):
 
 
 def run_training(
-    config,
-    data_root,
-    magnification,
-    split_ratios=(0.7, 0.15, 0.15),
-    seed=42,
-    device="cpu",
-    pretrained=True,
-):
+    config: dict,
+    data_root: Union[str, Path],
+    magnification: str,
+    split_ratios: Tuple[float, float, float] = (0.7, 0.15, 0.15),
+    seed: int = 42,
+    device: str = "cpu",
+    pretrained: bool = True,
+) -> float:
     import mlflow
 
     train_loader, val_loader = build_dataloaders(
@@ -110,7 +117,7 @@ def run_training(
     return best_f1
 
 
-def main():
+def main() -> None:
     import mlflow
 
     parser = argparse.ArgumentParser()
