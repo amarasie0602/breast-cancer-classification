@@ -33,3 +33,13 @@ def collect_predictions(model, dataloader, device="cpu"):
 
 def filter_misclassified(records):
     return [r for r in records if r["pred"] != r["label"]]
+
+
+def confidence(record):
+    """Distance from 0.5: how confidently the model made its prediction."""
+    return abs(record["probability"] - 0.5)
+
+
+def most_confident_errors(records, n=10):
+    errors = filter_misclassified(records)
+    return sorted(errors, key=confidence, reverse=True)[:n]
