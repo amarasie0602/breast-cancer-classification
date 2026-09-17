@@ -29,3 +29,7 @@ def collect_predictions(model, dataloader, device="cpu"):
             sample_idx += 1
 
     return records
+
+
+def filter_misclassified(records):
+    return [r for r in records if r["pred"] != r["label"]]
