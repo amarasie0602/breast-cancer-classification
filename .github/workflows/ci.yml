@@ -37,6 +37,25 @@ jobs:
       - run: pip install -r requirements.txt
       - run: pytest tests/test_model_validation.py -v
 
+  smoke-train:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt
+      - run: python scripts/make_smoke_dataset.py --root /tmp/smoke_data
+      - run: |
+          python -m src.training.train \
+            --data-root /tmp/smoke_data \
+            --magnification 40 \
+            --train-config configs/train_smoke.yaml \
+            --data-config configs/data.yaml \
+            --mlflow-tracking-uri sqlite:////tmp/smoke_mlflow.db \
+            --no-pretrained
+
   docker-build:
     runs-on: ubuntu-latest
     steps:
