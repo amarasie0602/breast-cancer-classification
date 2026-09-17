@@ -1,11 +1,14 @@
 """Render a Grad-CAM heatmap as an overlay on the original image."""
 
 import numpy as np
+import numpy.typing as npt
 from matplotlib import colormaps
 from PIL import Image
 
 
-def cam_to_overlay(cam, original_image, alpha=0.4, colormap="jet"):
+def cam_to_overlay(
+    cam: npt.NDArray[np.floating], original_image: Image.Image, alpha: float = 0.4, colormap: str = "jet"
+) -> Image.Image:
     """cam: 2D array in [0, 1]. original_image: PIL Image. Returns a PIL Image."""
     cam_resized = Image.fromarray((cam * 255).astype(np.uint8)).resize(
         original_image.size, resample=Image.BILINEAR
