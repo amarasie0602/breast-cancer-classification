@@ -1,11 +1,17 @@
 """Training and evaluation loops."""
 
+from typing import Dict
+
 import torch
+from torch import nn
+from torch.utils.data import DataLoader
 
 from src.training.metrics import accuracy, logits_to_preds, precision_recall_f1
 
 
-def train_one_epoch(model, dataloader, optimizer, criterion, device):
+def train_one_epoch(
+    model: nn.Module, dataloader: DataLoader, optimizer, criterion: nn.Module, device: str
+) -> float:
     if len(dataloader.dataset) == 0:
         raise ValueError("train_one_epoch received an empty dataset")
 
@@ -27,7 +33,7 @@ def train_one_epoch(model, dataloader, optimizer, criterion, device):
 
 
 @torch.no_grad()
-def evaluate(model, dataloader, criterion, device):
+def evaluate(model: nn.Module, dataloader: DataLoader, criterion: nn.Module, device: str) -> Dict[str, float]:
     if len(dataloader.dataset) == 0:
         raise ValueError("evaluate received an empty dataset")
 
