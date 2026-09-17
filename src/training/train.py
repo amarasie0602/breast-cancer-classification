@@ -119,6 +119,7 @@ def main():
     parser.add_argument("--train-config", default="configs/train.yaml")
     parser.add_argument("--data-config", default="configs/data.yaml")
     parser.add_argument("--mlflow-tracking-uri", default="sqlite:///mlflow.db")
+    parser.add_argument("--no-pretrained", action="store_true", help="skip downloading ImageNet weights")
     args = parser.parse_args()
 
     mlflow.set_tracking_uri(args.mlflow_tracking_uri)
@@ -133,6 +134,7 @@ def main():
         args.magnification,
         split_ratios=(ratios["train"], ratios["val"], ratios["test"]),
         seed=data_config["seed"],
+        pretrained=not args.no_pretrained,
     )
 
 
