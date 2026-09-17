@@ -1,11 +1,22 @@
 """Batch Grad-CAM visualization: grid of original vs. overlay for a batch of images."""
 
+from typing import Optional, Sequence
+
 import matplotlib.pyplot as plt
+import numpy as np
+from matplotlib.figure import Figure
+from PIL import Image
 
 from src.explainability.overlay import cam_to_overlay
 
 
-def plot_gradcam_grid(images, cams, labels=None, preds=None, ncols=4):
+def plot_gradcam_grid(
+    images: Sequence[Image.Image],
+    cams: Sequence[np.ndarray],
+    labels: Optional[Sequence] = None,
+    preds: Optional[Sequence] = None,
+    ncols: int = 4,
+) -> Figure:
     """images: list of PIL Images. cams: list of 2D numpy arrays in [0, 1]."""
     n = len(images)
     ncols = min(ncols, n)
