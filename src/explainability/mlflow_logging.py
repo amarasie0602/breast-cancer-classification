@@ -2,12 +2,25 @@
 
 import tempfile
 from pathlib import Path
+from typing import Optional, Sequence
+
+from matplotlib.figure import Figure
+from PIL import Image
+from torch import Tensor, nn
 
 from src.explainability.gradcam import GradCAM
 from src.explainability.visualize import plot_gradcam_grid
 
 
-def log_gradcam_batch(model, target_layer, images, tensors, labels=None, preds=None, artifact_path="gradcam"):
+def log_gradcam_batch(
+    model: nn.Module,
+    target_layer: nn.Module,
+    images: Sequence[Image.Image],
+    tensors: Sequence[Tensor],
+    labels: Optional[Sequence] = None,
+    preds: Optional[Sequence] = None,
+    artifact_path: str = "gradcam",
+) -> Figure:
     import mlflow
 
     cam_extractor = GradCAM(model, target_layer)
