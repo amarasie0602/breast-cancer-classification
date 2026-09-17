@@ -4,13 +4,14 @@ Normalization stats are ImageNet's, matching the pretrained backbone.
 """
 
 from torchvision import transforms
+from torchvision.transforms import Compose
 
 IMAGENET_MEAN = (0.485, 0.456, 0.406)
 IMAGENET_STD = (0.229, 0.224, 0.225)
 IMAGE_SIZE = 224
 
 
-def eval_transform():
+def eval_transform() -> Compose:
     return transforms.Compose(
         [
             transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
@@ -20,7 +21,7 @@ def eval_transform():
     )
 
 
-def train_transform():
+def train_transform() -> Compose:
     return transforms.Compose(
         [
             transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
