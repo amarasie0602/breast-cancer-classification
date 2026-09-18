@@ -26,7 +26,7 @@ jobs:
         with:
           python-version: "3.11"
           cache: "pip"
-      - run: "pip install --only-binary :all: --no-binary antlr4-python3-runtime -r requirements.txt"
+      - run: "pip install --require-hashes --only-binary :all: --no-binary antlr4-python3-runtime -r requirements.lock.txt"
       - run: pytest -q
 
   model-validation:
@@ -37,7 +37,7 @@ jobs:
         with:
           python-version: "3.11"
           cache: "pip"
-      - run: "pip install --only-binary :all: --no-binary antlr4-python3-runtime -r requirements.txt"
+      - run: "pip install --require-hashes --only-binary :all: --no-binary antlr4-python3-runtime -r requirements.lock.txt"
       - run: pytest tests/test_model_validation.py -v
 
   smoke-train:
@@ -49,7 +49,7 @@ jobs:
         with:
           python-version: "3.11"
           cache: "pip"
-      - run: "pip install --only-binary :all: --no-binary antlr4-python3-runtime -r requirements.txt"
+      - run: "pip install --require-hashes --only-binary :all: --no-binary antlr4-python3-runtime -r requirements.lock.txt"
       - run: python scripts/make_smoke_dataset.py --root /tmp/smoke_data
       - run: |
           python -m src.training.train \

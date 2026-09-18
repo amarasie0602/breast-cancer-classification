@@ -1,8 +1,8 @@
 FROM python:3.11-slim AS builder
 
 WORKDIR /app
-COPY requirements-serving.txt .
-RUN pip install --no-cache-dir --only-binary :all: --prefix=/install -r requirements-serving.txt
+COPY requirements-serving.lock.txt .
+RUN pip install --no-cache-dir --require-hashes --only-binary :all: --prefix=/install -r requirements-serving.lock.txt
 
 
 FROM python:3.11-slim
