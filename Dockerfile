@@ -2,7 +2,7 @@ FROM python:3.11-slim AS builder
 
 WORKDIR /app
 COPY requirements-serving.txt .
-RUN pip install --no-cache-dir --prefix=/install -r requirements-serving.txt
+RUN pip install --no-cache-dir --only-binary :all: --prefix=/install -r requirements-serving.txt
 
 
 FROM python:3.11-slim
