@@ -13,6 +13,9 @@ COPY --from=builder /install /usr/local
 COPY src/ src/
 COPY configs/ configs/
 
+RUN useradd --create-home --uid 1000 appuser
+USER appuser
+
 EXPOSE 8000
 
 CMD ["uvicorn", "src.serving.app:app", "--host", "0.0.0.0", "--port", "8000"]
