@@ -36,9 +36,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Trigger deploy hook (Render/Railway) if configured
+        env:
+          DEPLOY_HOOK_URL: ${{ secrets.DEPLOY_HOOK_URL }}
         run: |
-          if [ -n "${{ secrets.DEPLOY_HOOK_URL }}" ]; then
-            curl -fsS -X POST "${{ secrets.DEPLOY_HOOK_URL }}"
+          if [ -n "$DEPLOY_HOOK_URL" ]; then
+            curl -fsS -X POST "$DEPLOY_HOOK_URL"
           else
             echo "No DEPLOY_HOOK_URL secret set — skipping deploy. See README for how to add one."
           fi
