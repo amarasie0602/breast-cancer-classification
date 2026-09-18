@@ -18,7 +18,10 @@ from src.training.loop import evaluate, train_one_epoch
 
 
 def load_config(path: Union[str, Path]) -> dict:
-    with open(path) as f:
+    resolved = Path(path).resolve()
+    if not resolved.is_relative_to(Path.cwd()):
+        raise ValueError(f"config path must be within the project directory: {path}")
+    with open(resolved) as f:
         return yaml.safe_load(f)
 
 

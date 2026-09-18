@@ -1,4 +1,22 @@
-from src.training.train import run_training
+import pytest
+
+from src.training.train import load_config, run_training
+
+
+def test_load_config_reads_yaml_within_cwd(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "config.yaml").write_text("epochs: 5\n")
+
+    config = load_config("config.yaml")
+
+    assert config == {"epochs": 5}
+
+
+def test_load_config_rejects_path_outside_cwd(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+
+    with pytest.raises(ValueError, match="within the project directory"):
+        load_config("../../../../etc/passwd")
 
 
 def test_run_training_end_to_end_smoke(breakhis_root_multi_patient, tmp_path, monkeypatch):
