@@ -203,7 +203,7 @@
 
   <form id="predict-form" class="panel">
     <label for="file-input">Histopathology image</label>
-    <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Choose an image file">
+    <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Choose an image file" onkeydown="handleDropzoneKey(event)">
       <span id="dropzone-text">Click to choose a file, or drag one here</span>
       <input type="file" id="file-input" accept="image/*" />
       <img id="preview" alt="Selected image preview" />
@@ -274,12 +274,12 @@
   }
 
   dropzone.addEventListener("click", () => fileInput.click());
-  dropzone.addEventListener("keydown", (e) => {
+  function handleDropzoneKey(e) {
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
       fileInput.click();
     }
-  });
+  }
   fileInput.addEventListener("change", () => selectFile(fileInput.files[0]));
 
   ["dragover", "dragenter"].forEach((evt) =>
