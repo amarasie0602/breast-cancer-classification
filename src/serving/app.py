@@ -14,6 +14,7 @@ from PIL import Image, UnidentifiedImageError
 from src.data.transforms import eval_transform
 from src.explainability.gradcam import GradCAM
 from src.explainability.overlay import cam_to_overlay
+from src.serving.input_guard import looks_like_histology
 from src.serving.logging_middleware import RequestLoggingMiddleware
 from src.serving.metrics import get_prediction_distribution, record_prediction
 from src.serving.model_loader import get_model
@@ -53,6 +54,17 @@ async def predict(
 
     if not os.path.exists(CHECKPOINT_PATH):
         raise HTTPException(status_code=503, detail="Model checkpoint not available")
+
+    if not looks_like_histology(image):
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "This doesn't look like an H&E-stained histopathology image. "
+                "The model only recognizes breast tissue histology slides and "
+                "has no way to reject unrelated images gracefully, so results "
+                "on other images would be meaningless."
+            ),
+        )
 
     model = get_model(CHECKPOINT_PATH)
     tensor = eval_transform()(image).unsqueeze(0)
