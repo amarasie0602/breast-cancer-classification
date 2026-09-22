@@ -3,10 +3,12 @@
 import base64
 import io
 import os
+from pathlib import Path
 from typing import Dict
 
 import torch
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 from PIL import Image, UnidentifiedImageError
 
 from src.data.transforms import eval_transform
@@ -21,6 +23,12 @@ app = FastAPI(title="Breast Cancer Histopathology Classifier")
 app.add_middleware(RequestLoggingMiddleware)
 
 CHECKPOINT_PATH = os.environ.get("CHECKPOINT_PATH", "checkpoints/best_mag40.pt")
+STATIC_DIR = Path(__file__).parent / "static"
+
+
+@app.get("/", include_in_schema=False)
+def index() -> FileResponse:
+    return FileResponse(STATIC_DIR / "index.html")
 
 
 @app.get("/health")

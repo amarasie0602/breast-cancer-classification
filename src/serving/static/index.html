@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Breast Cancer Histopathology Classifier</title>
+<style>
+  :root {
+    --bg: #f7f7f9;
+    --panel: #ffffff;
+    --border: #e2e2e7;
+    --text: #1c1c22;
+    --muted: #6b6b76;
+    --accent: #4a5cf0;
+    --benign: #1a8f5e;
+    --malignant: #c0392b;
+    --danger-bg: #fdecea;
+    --danger-border: #f4c7c3;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #15151a;
+      --panel: #1e1e25;
+      --border: #303038;
+      --text: #eaeaf0;
+      --muted: #9a9aa5;
+      --danger-bg: #3a201f;
+      --danger-border: #5c2b28;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #15151a;
+    --panel: #1e1e25;
+    --border: #303038;
+    --text: #eaeaf0;
+    --muted: #9a9aa5;
+    --danger-bg: #3a201f;
+    --danger-border: #5c2b28;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    padding: 16px;
+  }
+  main {
+    max-width: 720px;
+    margin: 0 auto;
+  }
+  h1 {
+    font-size: 1.4rem;
+    margin: 24px 0 4px;
+  }
+  .subtitle {
+    color: var(--muted);
+    font-size: 0.9rem;
+    margin-bottom: 16px;
+  }
+  .disclaimer {
+    background: var(--danger-bg);
+    border: 1px solid var(--danger-border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    font-size: 0.85rem;
+    margin-bottom: 20px;
+    line-height: 1.4;
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+  label {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+  .dropzone {
+    border: 2px dashed var(--border);
+    border-radius: 10px;
+    padding: 28px 16px;
+    text-align: center;
+    cursor: pointer;
+    color: var(--muted);
+    font-size: 0.9rem;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .dropzone:hover, .dropzone.dragover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .dropzone input { display: none; }
+  #preview {
+    max-width: 100%;
+    max-height: 220px;
+    border-radius: 8px;
+    margin-top: 12px;
+    display: none;
+  }
+  select, button {
+    font: inherit;
+  }
+  select {
+    width: 100%;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--text);
+    margin-bottom: 16px;
+  }
+  button {
+    width: 100%;
+    padding: 12px;
+    border: none;
+    border-radius: 10px;
+    background: var(--accent);
+    color: white;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  #status {
+    min-height: 1.2em;
+    font-size: 0.9rem;
+    color: var(--muted);
+    margin-top: 10px;
+  }
+  #status.error { color: var(--malignant); }
+  #result {
+    display: none;
+  }
+  .verdict {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin-bottom: 4px;
+  }
+  .verdict .label {
+    font-size: 1.6rem;
+    font-weight: 700;
+    text-transform: capitalize;
+  }
+  .verdict .label.benign { color: var(--benign); }
+  .verdict .label.malignant { color: var(--malignant); }
+  .verdict .confidence {
+    color: var(--muted);
+    font-size: 0.95rem;
+  }
+  .bar-track {
+    height: 8px;
+    border-radius: 4px;
+    background: var(--border);
+    overflow: hidden;
+    margin: 10px 0 18px;
+  }
+  .bar-fill {
+    height: 100%;
+    border-radius: 4px;
+  }
+  .bar-fill.benign { background: var(--benign); }
+  .bar-fill.malignant { background: var(--malignant); }
+  figure {
+    margin: 0;
+  }
+  figure img {
+    width: 100%;
+    border-radius: 10px;
+    display: block;
+  }
+  figcaption {
+    font-size: 0.8rem;
+    color: var(--muted);
+    margin-top: 6px;
+  }
+  footer {
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.75rem;
+    margin: 24px 0 8px;
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Breast Cancer Histopathology Classifier</h1>
+  <p class="subtitle">Upload a BreakHis-style H&amp;E histopathology image to get a benign/malignant prediction with a Grad-CAM overlay.</p>
+
+  <div class="disclaimer">
+    <strong>Not a diagnostic device.</strong> This is a research/coursework
+    project demonstrating an MLOps pipeline. It has not undergone clinical
+    validation and must not be used to inform real patient care or
+    treatment decisions.
+  </div>
+
+  <form id="predict-form" class="panel">
+    <label for="file-input">Histopathology image</label>
+    <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Choose an image file">
+      <span id="dropzone-text">Click to choose a file, or drag one here</span>
+      <input type="file" id="file-input" accept="image/*" />
+      <img id="preview" alt="Selected image preview" />
+    </div>
+
+    <label for="magnification" style="margin-top:16px;">Magnification</label>
+    <select id="magnification" name="magnification">
+      <option value="40">40x</option>
+      <option value="100">100x</option>
+      <option value="200">200x</option>
+      <option value="400">400x</option>
+    </select>
+
+    <button type="submit" id="submit-btn" disabled>Classify image</button>
+    <div id="status" role="status" aria-live="polite"></div>
+  </form>
+
+  <section id="result" class="panel" aria-live="polite">
+    <div class="verdict">
+      <span class="label" id="result-label"></span>
+      <span class="confidence" id="result-confidence"></span>
+    </div>
+    <div class="bar-track">
+      <div class="bar-fill" id="result-bar"></div>
+    </div>
+    <figure>
+      <img id="result-overlay" alt="Grad-CAM overlay highlighting regions that influenced the prediction" />
+      <figcaption>Grad-CAM overlay — highlighted regions influenced the prediction most. Illustrative only, not verification that the model reasoned about clinically relevant features.</figcaption>
+    </figure>
+  </section>
+
+  <footer>
+    <a href="/health">/health</a> &middot; <a href="/metrics">/metrics</a> &middot; <a href="/docs">API docs</a>
+  </footer>
+</main>
+
+<script>
+  const dropzone = document.getElementById("dropzone");
+  const dropzoneText = document.getElementById("dropzone-text");
+  const fileInput = document.getElementById("file-input");
+  const preview = document.getElementById("preview");
+  const form = document.getElementById("predict-form");
+  const submitBtn = document.getElementById("submit-btn");
+  const statusEl = document.getElementById("status");
+  const resultEl = document.getElementById("result");
+  const resultLabel = document.getElementById("result-label");
+  const resultConfidence = document.getElementById("result-confidence");
+  const resultBar = document.getElementById("result-bar");
+  const resultOverlay = document.getElementById("result-overlay");
+
+  let selectedFile = null;
+
+  function setStatus(message, isError) {
+    statusEl.textContent = message || "";
+    statusEl.classList.toggle("error", Boolean(isError));
+  }
+
+  function selectFile(file) {
+    if (!file) return;
+    selectedFile = file;
+    submitBtn.disabled = false;
+    dropzoneText.textContent = file.name;
+    const url = URL.createObjectURL(file);
+    preview.src = url;
+    preview.style.display = "block";
+    resultEl.style.display = "none";
+    setStatus("");
+  }
+
+  dropzone.addEventListener("click", () => fileInput.click());
+  dropzone.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      fileInput.click();
+    }
+  });
+  fileInput.addEventListener("change", () => selectFile(fileInput.files[0]));
+
+  ["dragover", "dragenter"].forEach((evt) =>
+    dropzone.addEventListener(evt, (e) => {
+      e.preventDefault();
+      dropzone.classList.add("dragover");
+    })
+  );
+  ["dragleave", "drop"].forEach((evt) =>
+    dropzone.addEventListener(evt, (e) => {
+      e.preventDefault();
+      dropzone.classList.remove("dragover");
+    })
+  );
+  dropzone.addEventListener("drop", (e) => {
+    const file = e.dataTransfer.files && e.dataTransfer.files[0];
+    if (file) selectFile(file);
+  });
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (!selectedFile) return;
+
+    submitBtn.disabled = true;
+    setStatus("Running inference…");
+    resultEl.style.display = "none";
+
+    const formData = new FormData();
+    formData.append("file", selectedFile);
+    formData.append("magnification", document.getElementById("magnification").value);
+
+    try {
+      const resp = await fetch("/predict", { method: "POST", body: formData });
+      if (!resp.ok) {
+        let detail = resp.statusText;
+        try {
+          const body = await resp.json();
+          detail = body.detail || detail;
+        } catch (_) {}
+        throw new Error(detail);
+      }
+      const data = await resp.json();
+
+      const pct = data.label === "malignant" ? data.probability : 1 - data.probability;
+      resultLabel.textContent = data.label;
+      resultLabel.className = "label " + data.label;
+      resultConfidence.textContent = (pct * 100).toFixed(1) + "% confidence";
+      resultBar.className = "bar-fill " + data.label;
+      resultBar.style.width = (pct * 100).toFixed(1) + "%";
+      resultOverlay.src = "data:image/png;base64," + data.gradcam_overlay_base64;
+
+      resultEl.style.display = "block";
+      setStatus("");
+    } catch (err) {
+      setStatus(err.message || "Something went wrong.", true);
+    } finally {
+      submitBtn.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>

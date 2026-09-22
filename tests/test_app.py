@@ -13,6 +13,13 @@ from src.training.checkpoint import save_checkpoint
 client = TestClient(app)
 
 
+def test_index_serves_html_page():
+    resp = client.get("/")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers["content-type"]
+    assert "Breast Cancer Histopathology Classifier" in resp.text
+
+
 def test_health_returns_ok():
     resp = client.get("/health")
     assert resp.status_code == 200
