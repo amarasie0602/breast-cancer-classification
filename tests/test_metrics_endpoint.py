@@ -5,7 +5,7 @@ from src.models.classifier import BreakHisClassifier
 from src.serving.app import app
 from src.serving.model_loader import get_model
 from src.training.checkpoint import save_checkpoint
-from tests.test_app import _fake_image_bytes
+from tests.test_app import _fake_histology_bytes
 
 client = TestClient(app)
 
@@ -29,7 +29,7 @@ def test_metrics_reflects_recorded_predictions(monkeypatch, tmp_path):
 
     client.post(
         "/predict",
-        files={"file": ("sample.png", _fake_image_bytes(), "image/png")},
+        files={"file": ("sample.png", _fake_histology_bytes(), "image/png")},
         data={"magnification": "40"},
     )
 
