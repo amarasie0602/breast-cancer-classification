@@ -1,0 +1,8 @@
+variants:
+  - learning_rate: 1.0e-4
+  - learning_rate: 3.0e-4
+  - learning_rate: 1.0e-3
+  - learning_rate: 1.0e-4
+    weight_decay: 1.0e-4
+  - learning_rate: 1.0e-4
+    batch_size: 64

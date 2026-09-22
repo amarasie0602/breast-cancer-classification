@@ -10,9 +10,12 @@ venv/
 .ruff_cache/
 
 # Data & experiment artifacts
-/data/
+/data/*
+!/data/README.md
+!/data/*.dvc
 mlruns/
 mlartifacts/
+mlflow.db
 *.dvc.lock
 
 # Model checkpoints

@@ -1,0 +1,13 @@
+epochs: 30
+batch_size: 32
+learning_rate: 1.0e-4
+weight_decay: 1.0e-5
+lr_scheduler:
+  type: reduce_on_plateau
+  patience: 3
+  factor: 0.5
+early_stopping:
+  patience: 7
+  min_delta: 0.001
+freeze_backbone_epochs: 2
+checkpoint_dir: checkpoints
