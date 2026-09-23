@@ -155,6 +155,21 @@
     color: var(--muted);
     font-size: 0.95rem;
   }
+  #subtype-section {
+    display: none;
+    margin-bottom: 18px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+  }
+  #subtype-section .subtype-label {
+    font-weight: 600;
+    font-size: 1.05rem;
+  }
+  #subtype-section .subtype-confidence {
+    color: var(--muted);
+    font-size: 0.85rem;
+    margin-top: 2px;
+  }
   .bar-track {
     height: 8px;
     border-radius: 4px;
@@ -192,13 +207,17 @@
 <body>
 <main>
   <h1>Breast Cancer Histopathology Classifier</h1>
-  <p class="subtitle">Upload a BreakHis-style H&amp;E histopathology image to get a benign/malignant prediction with a Grad-CAM overlay.</p>
+  <p class="subtitle">Upload a breast histology image for a 3-stage prediction: image validation, benign/malignant classification, and (for malignant results) cancer subtype.</p>
 
   <div class="disclaimer">
-    <strong>Not a diagnostic device.</strong> This is a research/coursework
-    project demonstrating an MLOps pipeline. It has not undergone clinical
-    validation and must not be used to inform real patient care or
-    treatment decisions.
+    <strong>Research and educational purposes only — not a medical diagnosis.</strong>
+    This is a research/coursework project demonstrating an MLOps pipeline. It
+    has not undergone clinical validation and must not be used to inform
+    real patient care or treatment decisions. "Benign" here means a
+    non-cancerous tumor, not confirmed-healthy tissue — this dataset
+    contains no normal/healthy tissue images at all, only benign and
+    malignant tumor specimens. The model does not estimate ER, PR, HER2, or
+    triple-negative status.
   </div>
 
   <form id="predict-form" class="panel">
@@ -229,6 +248,10 @@
     <div class="bar-track">
       <div class="bar-fill" id="result-bar"></div>
     </div>
+    <div id="subtype-section">
+      <div class="subtype-label" id="subtype-label"></div>
+      <div class="subtype-confidence" id="subtype-confidence"></div>
+    </div>
     <figure>
       <img id="result-overlay" alt="Grad-CAM overlay highlighting regions that influenced the prediction" />
       <figcaption>Grad-CAM overlay — highlighted regions influenced the prediction most. Illustrative only, not verification that the model reasoned about clinically relevant features.</figcaption>
@@ -253,6 +276,11 @@
   const resultConfidence = document.getElementById("result-confidence");
   const resultBar = document.getElementById("result-bar");
   const resultOverlay = document.getElementById("result-overlay");
+  const subtypeSection = document.getElementById("subtype-section");
+  const subtypeLabel = document.getElementById("subtype-label");
+  const subtypeConfidence = document.getElementById("subtype-confidence");
+
+  const DISPLAY_LABEL = { benign: "Benign", malignant: "Malignant (Cancer)" };
 
   let selectedFile = null;
 
@@ -324,12 +352,21 @@
       const data = await resp.json();
 
       const pct = data.label === "malignant" ? data.probability : 1 - data.probability;
-      resultLabel.textContent = data.label;
+      resultLabel.textContent = DISPLAY_LABEL[data.label] || data.label;
       resultLabel.className = "label " + data.label;
       resultConfidence.textContent = (pct * 100).toFixed(1) + "% confidence";
       resultBar.className = "bar-fill " + data.label;
       resultBar.style.width = (pct * 100).toFixed(1) + "%";
       resultOverlay.src = "data:image/png;base64," + data.gradcam_overlay_base64;
+
+      if (data.label === "malignant" && data.subtype) {
+        subtypeLabel.textContent = data.subtype_display_name || data.subtype;
+        subtypeConfidence.textContent =
+          "Subtype confidence: " + (data.subtype_confidence * 100).toFixed(1) + "%";
+        subtypeSection.style.display = "block";
+      } else {
+        subtypeSection.style.display = "none";
+      }
 
       resultEl.style.display = "block";
       setStatus("");
