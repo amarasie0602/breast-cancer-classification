@@ -102,6 +102,8 @@ def run_training(
 
             mlflow.log_metric("train_loss", train_loss, step=epoch)
             for key, value in val_metrics.items():
+                if key == "confusion_matrix":  # not a scalar; skip MLflow metric logging
+                    continue
                 mlflow.log_metric(f"val_{key}", value, step=epoch)
 
             if val_metrics["f1"] > best_f1:

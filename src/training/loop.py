@@ -6,7 +6,13 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader
 
-from src.training.metrics import accuracy, logits_to_preds, precision_recall_f1
+from src.training.metrics import (
+    accuracy,
+    confusion_matrix,
+    logits_to_preds,
+    precision_recall_f1,
+    sensitivity_specificity,
+)
 
 
 def train_one_epoch(
@@ -56,6 +62,8 @@ def evaluate(model: nn.Module, dataloader: DataLoader, criterion: nn.Module, dev
     preds = torch.cat(all_preds)
     labels = torch.cat(all_labels)
     precision, recall, f1 = precision_recall_f1(preds, labels)
+    sensitivity, specificity = sensitivity_specificity(preds, labels)
+    cm = confusion_matrix(preds, labels, num_classes=2)
 
     return {
         "loss": total_loss / len(dataloader.dataset),
@@ -63,4 +71,7 @@ def evaluate(model: nn.Module, dataloader: DataLoader, criterion: nn.Module, dev
         "precision": precision,
         "recall": recall,
         "f1": f1,
+        "sensitivity": sensitivity,
+        "specificity": specificity,
+        "confusion_matrix": cm,
     }

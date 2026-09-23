@@ -50,7 +50,16 @@ def test_evaluate_returns_expected_metric_keys(breakhis_root):
     criterion = nn.BCEWithLogitsLoss()
 
     metrics = evaluate(model, dataloader, criterion, "cpu")
-    assert set(metrics) == {"loss", "accuracy", "precision", "recall", "f1"}
+    assert set(metrics) == {
+        "loss",
+        "accuracy",
+        "precision",
+        "recall",
+        "f1",
+        "sensitivity",
+        "specificity",
+        "confusion_matrix",
+    }
 
 
 def test_train_one_epoch_on_empty_dataset_raises_clear_error():
