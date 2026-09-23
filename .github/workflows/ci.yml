@@ -38,7 +38,7 @@ jobs:
           python-version: "3.11"
           cache: "pip"
       - run: "pip install --require-hashes --only-binary :all: --no-binary antlr4-python3-runtime -r requirements.lock.txt"
-      - run: pytest tests/test_model_validation.py -v
+      - run: pytest tests/test_model_validation.py tests/test_subtype_validation.py -v
 
   smoke-train:
     runs-on: ubuntu-latest
@@ -56,6 +56,13 @@ jobs:
             --data-root /tmp/smoke_data \
             --magnification 40 \
             --train-config configs/train_smoke.yaml \
+            --data-config configs/data.yaml \
+            --mlflow-tracking-uri sqlite:////tmp/smoke_mlflow.db \
+            --no-pretrained
+      - run: |
+          python -m src.training.train_subtype \
+            --data-root /tmp/smoke_data \
+            --train-config configs/train_subtype_smoke.yaml \
             --data-config configs/data.yaml \
             --mlflow-tracking-uri sqlite:////tmp/smoke_mlflow.db \
             --no-pretrained
