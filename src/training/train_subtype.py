@@ -17,11 +17,11 @@ from pathlib import Path
 from typing import Tuple, Union
 
 from torch import nn, optim
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, WeightedRandomSampler
 
 from src.data.dataset import SUBTYPE_NAMES, BreakHisSubtypeDataset
 from src.data.splits import filter_samples_by_patients, stratified_patient_split
-from src.data.transforms import eval_transform, train_transform
+from src.data.transforms import eval_transform, strong_train_transform
 from src.models.classifier import MalignantSubtypeClassifier
 from src.training.checkpoint import save_checkpoint
 from src.training.early_stopping import EarlyStopping
@@ -45,14 +45,24 @@ def build_dataloaders(
         full_ds.samples, ratios=tuple(split_ratios), seed=seed, min_per_split=1
     )
 
-    train_ds = BreakHisSubtypeDataset(data_root, transform=train_transform())
+    train_ds = BreakHisSubtypeDataset(data_root, transform=strong_train_transform())
     train_ds.samples = filter_samples_by_patients(train_ds.samples, train_patients)
 
     val_ds = BreakHisSubtypeDataset(data_root, transform=eval_transform())
     val_ds.samples = filter_samples_by_patients(val_ds.samples, val_patients)
 
+    # Class-balanced sampling on top of the weighted loss: ductal_carcinoma
+    # is ~64% of malignant images, so with plain shuffling a batch of 32
+    # often contains zero papillary or lobular examples, and the gradient
+    # for those classes arrives too sparsely to learn much.
+    weights_per_class = _class_weights(train_ds.samples)
+    sample_weights = [weights_per_class[s["label"]] for s in train_ds.samples]
+    sampler = WeightedRandomSampler(
+        sample_weights, num_samples=len(train_ds.samples), replacement=True
+    )
+
     return (
-        DataLoader(train_ds, batch_size=batch_size, shuffle=True),
+        DataLoader(train_ds, batch_size=batch_size, sampler=sampler),
         DataLoader(val_ds, batch_size=batch_size),
     )
 

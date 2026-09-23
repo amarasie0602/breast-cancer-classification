@@ -34,9 +34,10 @@ def _make_forced_subtype_checkpoint(tmp_path, forced_index: int):
     always predict the same subtype, regardless of input."""
     model = MalignantSubtypeClassifier(num_classes=len(SUBTYPE_NAMES), pretrained=False)
     with torch.no_grad():
-        model.backbone.fc.weight.zero_()
-        model.backbone.fc.bias.zero_()
-        model.backbone.fc.bias[forced_index] = 50.0
+        head = model.backbone.classifier[-1]
+        head.weight.zero_()
+        head.bias.zero_()
+        head.bias[forced_index] = 50.0
     path = tmp_path / "forced_subtype.pt"
     save_checkpoint(path, model, optim.Adam(model.parameters()), epoch=0, metrics={})
     return path
