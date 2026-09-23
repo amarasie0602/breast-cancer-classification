@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from src.data.dataset import BreakHisDataset
@@ -30,3 +32,29 @@ def test_filter_samples_by_patients(breakhis_root):
     assert len(train_samples) + len(filter_samples_by_patients(ds.samples, val)) + len(
         filter_samples_by_patients(ds.samples, test)
     ) == len(ds.samples)
+
+
+def test_min_per_split_guarantees_small_class_reaches_val_and_test():
+    """A 5-patient class: ratio rounding alone gives it 0 test patients."""
+    samples = [
+        {"path": Path(f"root/subtype/PATIENT-{i}/40X/img.png"), "label": 0} for i in range(5)
+    ]
+
+    _, val, test = stratified_patient_split(samples, ratios=(0.7, 0.15, 0.15))
+    assert len(test) == 0  # the problem this parameter exists to fix
+
+    train2, val2, test2 = stratified_patient_split(
+        samples, ratios=(0.7, 0.15, 0.15), min_per_split=1
+    )
+    assert len(val2) >= 1
+    assert len(test2) >= 1
+    assert len(train2) + len(val2) + len(test2) == 5
+
+
+def test_min_per_split_is_ignored_when_class_is_too_small_to_satisfy():
+    samples = [{"path": Path(f"root/subtype/P-{i}/40X/img.png"), "label": 0} for i in range(2)]
+
+    train, val, test = stratified_patient_split(
+        samples, ratios=(0.7, 0.15, 0.15), min_per_split=1
+    )
+    assert len(train) + len(val) + len(test) == 2

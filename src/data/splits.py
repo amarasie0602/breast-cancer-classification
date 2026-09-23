@@ -11,8 +11,21 @@ from typing import Sequence, Tuple
 
 
 def stratified_patient_split(
-    samples: Sequence[dict], ratios: Tuple[float, float, float] = (0.7, 0.15, 0.15), seed: int = 42
+    samples: Sequence[dict],
+    ratios: Tuple[float, float, float] = (0.7, 0.15, 0.15),
+    seed: int = 42,
+    min_per_split: int = 0,
 ) -> Tuple[set, set, set]:
+    """Split patients (not images) into train/val/test, stratified by label.
+
+    ``min_per_split`` guarantees each label contributes at least that many
+    patients to val and test, as long as the label has at least
+    ``3 * min_per_split`` patients to go around. Ratio rounding alone can
+    starve a small class entirely: BreakHis has only 5 lobular_carcinoma
+    patients, and round(5 * 0.15) == 1 for val leaves 0 for test, making
+    that class unmeasurable on the test set. Defaults to 0 (pure ratio
+    behavior) so the binary task's existing splits are unchanged.
+    """
     if abs(sum(ratios) - 1.0) > 1e-6:
         raise ValueError(f"ratios must sum to 1.0, got {ratios}")
 
@@ -29,6 +42,13 @@ def stratified_patient_split(
         n = len(patients)
         n_train = round(n * ratios[0])
         n_val = round(n * ratios[1])
+        n_test = n - n_train - n_val
+
+        if min_per_split > 0 and n >= 3 * min_per_split:
+            n_val = max(n_val, min_per_split)
+            n_test = max(n_test, min_per_split)
+            n_train = n - n_val - n_test
+
         train_patients.update(patients[:n_train])
         val_patients.update(patients[n_train : n_train + n_val])
         test_patients.update(patients[n_train + n_val :])
