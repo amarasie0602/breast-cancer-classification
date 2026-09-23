@@ -119,6 +119,27 @@ has as few as 135 images at a single magnification).
   of the four available bins by the subtype classifier — there is no
   "other/unknown subtype" option, since the model was never trained to
   recognize that its coverage is incomplete.
+- **Subtype performance is not statistically validated, and cannot be with
+  this dataset.** Image counts look adequate (560-3,451 per subtype) but
+  the unit that matters for generalization is the *patient*, and there
+  BreakHis is very thin:
+
+  | Malignant subtype | Patients | Train | Val | Test |
+  | --- | --- | --- | --- | --- |
+  | ductal_carcinoma | 38 | 27 | 6 | 5 |
+  | mucinous_carcinoma | 9 | 6 | 1 | 2 |
+  | papillary_carcinoma | 6 | 4 | 1 | 1 |
+  | lobular_carcinoma | 5 | 3 | 1 | 1 |
+
+  Three of the four classes are validated against a *single patient*. One
+  patient's slides being read wrong swings that class's F1 between 0 and
+  ~1, so subtype macro F1 is dominated by which patients happened to land
+  in which split, not by model quality. (Before `min_per_split` was added
+  to the splitter, lobular_carcinoma had **zero** test patients at all.)
+  Any single subtype accuracy figure from this data should be read as a
+  demonstration that the pipeline runs end to end, not as a measurement.
+  Patient-level k-fold cross-validation would give a more stable estimate
+  but cannot manufacture patients that aren't in the dataset.
 - **Input validation is a heuristic, not a trained classifier.** Stage 1
   (`src/serving/input_guard.py`) screens for H&E-characteristic color and
   texture; it catches ordinary photos, cartoons, and blank images but is
