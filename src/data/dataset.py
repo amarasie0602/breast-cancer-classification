@@ -14,6 +14,30 @@ from torch.utils.data import Dataset
 LABEL_MAP = {"benign": 0, "malignant": 1}
 MAGNIFICATIONS = ("40", "100", "200", "400")
 
+# The four malignant subtypes BreakHis actually labels (see docs/model_card.md
+# for why the other clinically-named subtypes -- DCIS, LCIS, inflammatory,
+# Paget, metaplastic, cribriform, and true tubular carcinoma -- are not
+# offered: they simply aren't represented in this dataset). Benign tumors in
+# BreakHis have no further subtype breakdown beyond the four benign tumor
+# types themselves, so subtype classification only applies to the malignant
+# branch of the pipeline.
+SUBTYPE_LABEL_MAP = {
+    "ductal_carcinoma": 0,
+    "lobular_carcinoma": 1,
+    "mucinous_carcinoma": 2,
+    "papillary_carcinoma": 3,
+}
+SUBTYPE_NAMES = tuple(SUBTYPE_LABEL_MAP.keys())
+
+# Human-readable names for the UI/API, including the clinical abbreviation
+# where BreakHis's folder name maps to a widely-used one.
+SUBTYPE_DISPLAY_NAMES = {
+    "ductal_carcinoma": "Invasive Ductal Carcinoma (IDC)",
+    "lobular_carcinoma": "Invasive Lobular Carcinoma (ILC)",
+    "mucinous_carcinoma": "Mucinous Carcinoma",
+    "papillary_carcinoma": "Papillary Carcinoma",
+}
+
 
 class BreakHisDataset(Dataset):
     def __init__(
@@ -59,6 +83,41 @@ class BreakHisDataset(Dataset):
                 for image_path in sorted(mag_dir.glob("*.png"))
             )
         return samples
+
+    def __len__(self) -> int:
+        return len(self.samples)
+
+    def __getitem__(self, idx):
+        sample = self.samples[idx]
+        image = Image.open(sample["path"]).convert("RGB")
+        if self.transform:
+            image = self.transform(image)
+        return image, sample["label"]
+
+
+class BreakHisSubtypeDataset(Dataset):
+    """Malignant-only samples, labeled by subtype instead of benign/malignant.
+
+    Reuses BreakHisDataset's manifest building (which already tracks each
+    sample's subtype folder name) and filters/remaps it, rather than
+    duplicating the directory-walking logic.
+    """
+
+    def __init__(
+        self,
+        root: Union[str, Path],
+        magnification: Optional[Union[str, int]] = None,
+        transform: Optional[Callable] = None,
+    ):
+        self.root = Path(root)
+        self.magnification = str(magnification) if magnification else None
+        self.transform = transform
+        base = BreakHisDataset(root, magnification=magnification)
+        self.samples = [
+            {**s, "label": SUBTYPE_LABEL_MAP[s["subtype"]]}
+            for s in base.samples
+            if s["subtype"] in SUBTYPE_LABEL_MAP
+        ]
 
     def __len__(self) -> int:
         return len(self.samples)
