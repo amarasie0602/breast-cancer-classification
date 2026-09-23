@@ -123,19 +123,27 @@ Per-magnification comparison — the project's headline finding. ResNet50,
 transfer learning, patient-level 70/15/15 split, held-out **test** set
 (never used for training or checkpoint selection):
 
-| Magnification | Test F1 | Test Accuracy | Test Precision | Test Recall |
-| -------------- | ------- | -------------- | --------------- | ----------- |
-| 200x           | 0.952   | 0.925          | 0.916            | 0.990       |
-| 40x            | 0.901   | 0.848          | 0.838            | 0.974       |
-| 400x           | 0.882   | 0.819          | 0.796            | 0.988       |
-| 100x           | 0.861   | 0.796          | 0.841            | 0.882       |
+| Magnification | F1 | Accuracy | Precision | Sensitivity | Specificity |
+| -------------- | ---- | -------- | --------- | ----------- | ----------- |
+| 200x           | 0.952 | 0.925   | 0.916     | 0.990       | 0.732       |
+| 40x            | 0.901 | 0.848   | 0.838     | 0.974       | 0.544       |
+| 400x           | 0.882 | 0.819   | 0.796     | 0.988       | 0.461       |
+| 100x           | 0.861 | 0.796   | 0.841     | 0.882       | 0.575       |
 
-Recall is consistently high (0.88-0.99) across magnifications, but the
-ranking is noisy — it flips depending on whether you look at validation
-or test metrics, since each patient-level split has only ~11-13 patients
-per magnification. See [docs/model_card.md](docs/model_card.md#results)
-for the full breakdown (including the validation-set numbers) and why
-that instability matters more than which magnification "wins."
+Regenerate with `python -m scripts.evaluate_test_set --magnification 40`.
+
+**Read the specificity column before the F1 column.** The model catches
+nearly every malignant case (sensitivity 0.88-0.99) but misclassifies
+roughly half of benign tissue as malignant — at 400x, 41 of 76 benign
+images. F1 looks strong only because it is computed on the malignant
+class, and malignant outnumbers benign about 2:1 in the test set, so a
+model that over-calls cancer is rewarded twice. The bias is the safer
+direction for screening, but it is not "the model works."
+
+The per-magnification ranking is also noisy — it flips between validation
+and test, since each split has only 11 test patients. See
+[docs/model_card.md](docs/model_card.md#results) for the confusion
+matrices and the full discussion.
 
 ## CI/CD
 

@@ -158,10 +158,15 @@ has as few as 135 images at a single magnification).
   validation, regulatory review, or comparison against pathologist
   performance on an independent cohort. Any resemblance to a deployable
   diagnostic tool is unintentional.
-- **False negatives carry asymmetric harm.** In a real screening context, a
-  missed malignant case is far costlier than a false alarm; this project
-  reports precision/recall/F1 separately (not just accuracy) so that
-  trade-off is visible rather than hidden behind a single number.
+- **False negatives carry asymmetric harm — and this model is tuned the
+  safe way, at a real cost.** A missed malignant case is far costlier than
+  a false alarm, and this model errs heavily toward over-calling cancer
+  (sensitivity 0.88-0.99, specificity 0.46-0.73). That direction is
+  defensible, but the cost is that roughly half of benign tissue gets
+  flagged, which would make it impractical without a human reviewing every
+  positive. Reporting sensitivity and specificity side by side (not just
+  accuracy or F1) is what makes that trade-off visible rather than hidden
+  behind a single number — see Results.
 - **Explainability is illustrative, not verification.** Grad-CAM overlays
   show which regions influenced a prediction, but a plausible-looking
   heatmap is not proof the model is reasoning about clinically relevant
@@ -187,24 +192,59 @@ instructive way:
 | 200x           | 0.905  | 0.878        |
 
 **Held-out test set** (never used for training or checkpoint selection —
-the honest number):
+the honest number). Regenerate with
+`python -m scripts.evaluate_test_set --magnification 40`:
 
-| Magnification | Test F1 | Test Accuracy | Test Precision | Test Recall | Test Images |
-| -------------- | ------- | -------------- | --------------- | ----------- | ----------- |
-| 200x           | 0.952   | 0.925           | 0.916            | 0.990       | 281         |
-| 40x            | 0.901   | 0.848           | 0.838            | 0.974       | 270         |
-| 400x           | 0.882   | 0.819           | 0.796            | 0.988       | 238         |
-| 100x           | 0.861   | 0.796           | 0.841            | 0.882       | 284         |
+| Magnification | F1 | Accuracy | Precision | Sensitivity | **Specificity** | Images | Patients |
+| -------------- | ---- | -------- | --------- | ----------- | --------------- | ------ | -------- |
+| 200x           | 0.952 | 0.925   | 0.916     | 0.990       | **0.732**       | 281    | 11       |
+| 40x            | 0.901 | 0.848   | 0.838     | 0.974       | **0.544**       | 270    | 11       |
+| 400x           | 0.882 | 0.819   | 0.796     | 0.988       | **0.461**       | 238    | 11       |
+| 100x           | 0.861 | 0.796   | 0.841     | 0.882       | **0.575**       | 284    | 11       |
+
+### The specificity problem
+
+**This is the most important number on the page, and F1 hides it.** The
+model catches nearly every malignant case (sensitivity 0.88-0.99) but
+misclassifies roughly half of all benign tissue as malignant. Confusion
+matrices, rows = actual:
+
+```
+        40x                        400x
+        benign  malignant          benign  malignant
+benign      43         36   |  benign      35         41
+malignant    5        186   |  malignant    2        160
+
+        200x                       100x
+        benign  malignant          benign  malignant
+benign      52         19   |  benign      46         34
+malignant    2        208   |  malignant   24        180
+```
+
+At 400x, 41 of 76 benign images (54%) are called malignant. A headline F1
+of 0.88-0.95 looks strong only because F1 here is computed on the malignant
+class, and malignant outnumbers benign roughly 2:1 in the test set — so a
+model that says "malignant" too readily is rewarded twice over. Accuracy
+is inflated for the same reason. Sensitivity and specificity reported
+side by side are what make the actual behavior visible.
+
+In screening terms this model is heavily biased toward over-calling
+cancer. That bias is the *safer* direction if a human reviews every
+positive (a missed cancer is worse than a false alarm), but a tool that
+flags half of healthy tissue would be impractical in real use, and no
+aggregate score above should be read as "the model works."
+
+The 0.5 decision threshold is an untuned default, not a chosen operating
+point; moving it would trade sensitivity for specificity, and the right
+place to put it depends on a clinical cost tradeoff this project is not in
+a position to make.
 
 **The ranking flips between validation and test** (40x is best on val, but
-200x is best on test). With only ~11-13 patients per magnification in each
-split, this is expected sampling variance rather than a robust ordering —
-it is itself a limitation, not a bug: at this dataset size, per-magnification
-rankings should be treated as noisy, and a claim like "40x magnification is
-best for this task" is not statistically well-supported by these splits
-alone. Recall is consistently high (0.88-0.99) across all four
-magnifications, meaning the model rarely misses a malignant case in this
-sample, but precision (and therefore false-positive rate) varies more.
+200x is best on test). With only 11 test patients per magnification, this is
+expected sampling variance rather than a robust ordering — it is itself a
+limitation, not a bug: at this dataset size, per-magnification rankings
+should be treated as noisy, and a claim like "40x magnification is best for
+this task" is not statistically well-supported by these splits alone.
 
 See `notebooks/02_error_analysis.ipynb` for a concrete failure mode found
 in the 40x model: nearly all of its most confident errors are the benign
