@@ -11,19 +11,21 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from PIL import Image, UnidentifiedImageError
 
+from src.data.dataset import SUBTYPE_DISPLAY_NAMES, SUBTYPE_NAMES
 from src.data.transforms import eval_transform
 from src.explainability.gradcam import GradCAM
 from src.explainability.overlay import cam_to_overlay
 from src.serving.input_guard import looks_like_histology
 from src.serving.logging_middleware import RequestLoggingMiddleware
 from src.serving.metrics import get_prediction_distribution, record_prediction
-from src.serving.model_loader import get_model
+from src.serving.model_loader import get_model, get_subtype_model
 from src.serving.schemas import PredictionResponse
 
 app = FastAPI(title="Breast Cancer Histopathology Classifier")
 app.add_middleware(RequestLoggingMiddleware)
 
 CHECKPOINT_PATH = os.environ.get("CHECKPOINT_PATH", "checkpoints/best_mag40.pt")
+SUBTYPE_CHECKPOINT_PATH = os.environ.get("SUBTYPE_CHECKPOINT_PATH", "checkpoints/best_subtype.pt")
 STATIC_DIR = Path(__file__).parent / "static"
 
 
@@ -58,12 +60,7 @@ async def predict(
     if not looks_like_histology(image):
         raise HTTPException(
             status_code=422,
-            detail=(
-                "This doesn't look like an H&E-stained histopathology image. "
-                "The model only recognizes breast tissue histology slides and "
-                "has no way to reject unrelated images gracefully, so results "
-                "on other images would be meaningless."
-            ),
+            detail="Invalid Image — Please upload a valid breast histology image.",
         )
 
     model = get_model(CHECKPOINT_PATH)
@@ -84,9 +81,24 @@ async def predict(
     overlay.save(buf, format="PNG")
     overlay_base64 = base64.b64encode(buf.getvalue()).decode("utf-8")
 
+    subtype = subtype_display_name = None
+    subtype_confidence = None
+    if label == "malignant" and os.path.exists(SUBTYPE_CHECKPOINT_PATH):
+        subtype_model = get_subtype_model(SUBTYPE_CHECKPOINT_PATH)
+        with torch.no_grad():
+            subtype_logits = subtype_model(tensor)
+            subtype_probs = torch.softmax(subtype_logits, dim=1)[0]
+        subtype_idx = int(subtype_probs.argmax().item())
+        subtype = SUBTYPE_NAMES[subtype_idx]
+        subtype_display_name = SUBTYPE_DISPLAY_NAMES[subtype]
+        subtype_confidence = float(subtype_probs[subtype_idx].item())
+
     return PredictionResponse(
         label=label,
         probability=probability,
         magnification=magnification,
         gradcam_overlay_base64=overlay_base64,
+        subtype=subtype,
+        subtype_display_name=subtype_display_name,
+        subtype_confidence=subtype_confidence,
     )
