@@ -28,6 +28,15 @@ CHECKPOINT_PATH = os.environ.get("CHECKPOINT_PATH", "checkpoints/best_mag40.pt")
 SUBTYPE_CHECKPOINT_PATH = os.environ.get("SUBTYPE_CHECKPOINT_PATH", "checkpoints/best_subtype.pt")
 STATIC_DIR = Path(__file__).parent / "static"
 
+# Operating point for benign/malignant. 0.5 is where sigmoid happens to
+# cross, not a chosen threshold: at 0.5 this model runs at sensitivity
+# 0.88-0.99 but specificity 0.46-0.73 (see docs/model_card.md). Raising it
+# trades caught cancers for fewer false alarms. Deliberately left at the
+# documented default rather than silently tuned, since where it belongs is
+# a clinical cost judgement; `python -m scripts.tune_threshold` prints the
+# whole curve to inform it.
+DECISION_THRESHOLD = float(os.environ.get("DECISION_THRESHOLD", "0.5"))
+
 
 @app.get("/", include_in_schema=False)
 def index() -> FileResponse:
@@ -70,7 +79,7 @@ async def predict(
         logit = model(tensor)
         probability = torch.sigmoid(logit).item()
 
-    label = "malignant" if probability >= 0.5 else "benign"
+    label = "malignant" if probability >= DECISION_THRESHOLD else "benign"
     record_prediction(label)
 
     with GradCAM(model, model.backbone.layer4[-1]) as cam_extractor:
