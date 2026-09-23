@@ -51,3 +51,26 @@ def test_run_training_end_to_end_smoke(breakhis_root_multi_patient, tmp_path, mo
     runs = mlflow.search_runs()
     assert runs.loc[0, "tags.magnification"] == "40"
     assert runs.loc[0, "tags.model_variant"] == "resnet50"
+
+
+def test_build_dataloaders_balances_classes_when_requested(breakhis_root_multi_patient):
+    from torch.utils.data import WeightedRandomSampler
+
+    from src.training.train import build_dataloaders
+
+    plain, _ = build_dataloaders(
+        breakhis_root_multi_patient, "40", (0.5, 0.25, 0.25), 42, 2, balance_classes=False
+    )
+    balanced, _ = build_dataloaders(
+        breakhis_root_multi_patient, "40", (0.5, 0.25, 0.25), 42, 2, balance_classes=True
+    )
+
+    assert plain.sampler is not None and not isinstance(plain.sampler, WeightedRandomSampler)
+    assert isinstance(balanced.sampler, WeightedRandomSampler)
+
+    # Rarer class must carry the heavier per-sample weight.
+    weights_by_label = {}
+    for sample, weight in zip(balanced.dataset.samples, balanced.sampler.weights.tolist(), strict=True):
+        weights_by_label.setdefault(sample["label"], set()).add(round(weight, 6))
+    for weights in weights_by_label.values():
+        assert len(weights) == 1  # one weight per class, not per image
