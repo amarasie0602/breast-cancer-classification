@@ -18,13 +18,15 @@ mlartifacts/
 mlflow.db
 *.dvc.lock
 
-# Model checkpoints (all DVC-tracked; best_mag40.pt is additionally
-# committed via Git LFS since the serving image needs it and CI/CD
-# runners can't reach the local-path DVC remote)
+# Model checkpoints (all DVC-tracked; best_mag40.pt and best_subtype.pt are
+# additionally committed via Git LFS since the serving image needs them and
+# CI/CD runners can't reach the local-path DVC remote)
 checkpoints/*
 !checkpoints/best_mag40.pt
+!checkpoints/best_subtype.pt
 *.pt
 !checkpoints/best_mag40.pt
+!checkpoints/best_subtype.pt
 *.pth
 *.ckpt
 

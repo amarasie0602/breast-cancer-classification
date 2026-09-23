@@ -7,3 +7,4 @@ services:
       - ./checkpoints:/app/checkpoints:ro
     environment:
       - CHECKPOINT_PATH=/app/checkpoints/best_mag40.pt
+      - SUBTYPE_CHECKPOINT_PATH=/app/checkpoints/best_subtype.pt
