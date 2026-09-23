@@ -1,0 +1,12 @@
+epochs: 1
+batch_size: 2
+learning_rate: 1.0e-4
+weight_decay: 1.0e-5
+lr_scheduler:
+  patience: 1
+  factor: 0.5
+early_stopping:
+  patience: 5
+  min_delta: 0.0
+freeze_backbone_epochs: 0
+checkpoint_dir: /tmp/smoke_checkpoints
