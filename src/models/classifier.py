@@ -29,3 +29,27 @@ class BreakHisClassifier(nn.Module):
     def unfreeze_backbone(self) -> None:
         for param in self.backbone.parameters():
             param.requires_grad = True
+
+
+class MalignantSubtypeClassifier(nn.Module):
+    """ResNet50 with its final fc layer replaced for malignant-subtype
+    classification (multi-class, CrossEntropyLoss over logits -- unlike
+    BreakHisClassifier's single-logit binary output)."""
+
+    def __init__(self, num_classes: int, pretrained: bool = True):
+        super().__init__()
+        self.backbone = build_backbone(pretrained=pretrained)
+        in_features = self.backbone.fc.in_features
+        self.backbone.fc = nn.Linear(in_features, num_classes)
+
+    def forward(self, x: Tensor) -> Tensor:
+        return self.backbone(x)
+
+    def freeze_backbone(self) -> None:
+        for name, param in self.backbone.named_parameters():
+            if not name.startswith("fc."):
+                param.requires_grad = False
+
+    def unfreeze_backbone(self) -> None:
+        for param in self.backbone.parameters():
+            param.requires_grad = True
