@@ -234,10 +234,41 @@ positive (a missed cancer is worse than a false alarm), but a tool that
 flags half of healthy tissue would be impractical in real use, and no
 aggregate score above should be read as "the model works."
 
-The 0.5 decision threshold is an untuned default, not a chosen operating
-point; moving it would trade sensitivity for specificity, and the right
-place to put it depends on a clinical cost tradeoff this project is not in
-a position to make.
+### Threshold tuning was tried, and rejected
+
+The 0.5 decision threshold is where sigmoid crosses, not a chosen operating
+point, so the obvious next move is to tune it. `python -m
+scripts.tune_threshold --magnification 40` sweeps the whole curve on the
+**validation** split (never test — picking a threshold is model selection).
+Doing that for all four magnifications gives:
+
+| Magnification | Best threshold (Youden J) | Val balanced acc at best | at 0.5 |
+| ------------- | ------------------------- | ------------------------ | ------ |
+| 40x  | 0.90 | 0.923 | 0.894 |
+| 100x | 0.45 | 0.930 | 0.928 |
+| 200x | 0.80 | 0.893 | 0.872 |
+| 400x | 0.45 | 0.880 | 0.871 |
+
+**The optimum is unstable — 0.45, 0.45, 0.80, 0.90 — and the gains are
+0.002 to 0.029 balanced accuracy.** Four models on the same data disagreeing
+that widely about where the threshold belongs is the signature of noise from
+13-patient validation splits, not a real operating point. Tuning the
+threshold to 0.90 on the strength of the 40x split would be fitting 13
+patients, and would probably not transfer.
+
+So the default stays at 0.5, and `DECISION_THRESHOLD` is exposed as an
+environment variable for anyone who wants to move it deliberately. Where it
+belongs depends on the cost of a missed cancer versus a false alarm — a
+clinical judgement this project can inform but shouldn't quietly make.
+
+### Validation flatters these models relative to test
+
+Specificity at threshold 0.5 is 0.81-0.96 on validation but 0.46-0.73 on
+test, for the same checkpoints. The validation patients' benign tissue is
+simply easier than the test patients'. With ~12 patients on each side of
+that split, this gap is a property of which patients landed where, not of
+the model — and it is the clearest single illustration of why every number
+on this page should be read with wide error bars.
 
 **The ranking flips between validation and test** (40x is best on val, but
 200x is best on test). With only 11 test patients per magnification, this is
