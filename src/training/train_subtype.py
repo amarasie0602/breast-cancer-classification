@@ -38,8 +38,11 @@ def build_dataloaders(
     batch_size: int,
 ) -> Tuple[DataLoader, DataLoader]:
     full_ds = BreakHisSubtypeDataset(data_root)
+    # min_per_split=1: lobular_carcinoma has only 5 patients in all of
+    # BreakHis, and plain ratio rounding leaves it with 0 test patients --
+    # i.e. a class the test set literally cannot measure.
     train_patients, val_patients, _ = stratified_patient_split(
-        full_ds.samples, ratios=tuple(split_ratios), seed=seed
+        full_ds.samples, ratios=tuple(split_ratios), seed=seed, min_per_split=1
     )
 
     train_ds = BreakHisSubtypeDataset(data_root, transform=train_transform())
