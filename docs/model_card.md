@@ -2,11 +2,33 @@
 
 ## Intended Use
 
-This model classifies breast tissue histopathology images as benign or
-malignant. It is a research/coursework artifact intended to demonstrate an
-MLOps pipeline (experiment tracking, versioning, testing, CI/CD) around a
-transfer-learning image classifier — it is **not** a clinical diagnostic tool
-and must not be used to inform real patient care or treatment decisions.
+This is a 3-stage research/coursework artifact demonstrating an MLOps
+pipeline (experiment tracking, versioning, testing, CI/CD) around
+transfer-learning image classifiers — it is **not** a clinical diagnostic
+tool and must not be used to inform real patient care or treatment
+decisions. Given a breast tissue histology image, it:
+
+1. **Validates the input** is plausibly an H&E-stained histology image at
+   all (`src/serving/input_guard.py`), rejecting photos, screenshots, and
+   other unrelated images with a clear "Invalid Image" response rather than
+   forcing every input through the classifier.
+2. **Classifies benign vs. malignant** (the original binary model).
+3. **For malignant results only**, classifies the malignant subtype among
+   the four BreakHis actually labels: Invasive Ductal Carcinoma (IDC),
+   Invasive Lobular Carcinoma (ILC), Mucinous Carcinoma, Papillary
+   Carcinoma.
+
+**"Benign" means non-cancerous tumor, not healthy tissue.** BreakHis
+contains no normal/healthy breast tissue images at all — every image in the
+dataset is from a tumor biopsy (surgery is why the sample was taken in the
+first place). An earlier draft of this pipeline's UI called this stage
+"Healthy vs. Cancer"; that framing was corrected because it isn't true of
+what the model has ever seen a single training example of.
+
+**This model does not estimate ER, PR, HER2, or triple-negative status.**
+Those are immunohistochemistry/biomarker results, not something derivable
+from H&E morphology alone without validated biomarker labels, which this
+dataset does not have.
 
 ## Dataset Provenance
 
@@ -20,6 +42,59 @@ labeled benign or malignant across several tumor subtypes.
 Splits in this project are made at the **patient** level (not image level)
 to prevent leakage, since multiple images from the same patient are highly
 correlated.
+
+### Available classes
+
+| Level | Class | Images |
+| --- | --- | --- |
+| Top | benign (non-cancerous tumor) | 2,480 |
+| Top | malignant (cancer) | 5,429 |
+| Benign subtype | adenosis | 444 |
+| Benign subtype | fibroadenoma | 1,014 |
+| Benign subtype | phyllodes_tumor | 453 |
+| Benign subtype | tubular_adenoma | 569 |
+| Malignant subtype | ductal_carcinoma (IDC) | 3,451 |
+| Malignant subtype | lobular_carcinoma (ILC) | 626 |
+| Malignant subtype | mucinous_carcinoma | 792 |
+| Malignant subtype | papillary_carcinoma | 560 |
+
+This project only trains a **malignant**-subtype classifier (Stage 3),
+matching BreakHis's actual structure: benign tumors have no further
+subtype breakdown beyond the four benign tumor *types* themselves (which
+aren't clinically-named "subtypes" the way the malignant ones are), and
+none of the other commonly-referenced breast cancer subtypes — DCIS, LCIS,
+inflammatory breast cancer, Paget disease, metaplastic carcinoma, or
+cribriform carcinoma — appear in this dataset at all. A dataset-provided
+"tubular_adenoma" (benign) should not be confused with tubular
+*carcinoma* (malignant, clinically distinct, and also not in this
+dataset) despite the similar name.
+
+Unlike the binary classifier (trained and evaluated separately per
+magnification, see Results below), the subtype classifier is trained on
+all four magnifications combined: per-magnification malignant-subtype
+counts are too small for a meaningful 4-class split (papillary_carcinoma
+has as few as 135 images at a single magnification).
+
+### Dataset quality checks
+
+- **Corrupted files / unreadable images:** none found (`Image.verify()`
+  across all 7,909 images).
+- **Image dimensions:** nearly uniform — 7,835 of 7,909 images (99.1%) are
+  700×460; the remaining 74 (0.9%) are 700×456, a 4px height difference.
+  Immaterial in practice since both `train_transform`/`eval_transform`
+  resize every image to a common size before it reaches the model, but
+  worth recording rather than assuming uniformity.
+- **Exact duplicate images (by content hash):** none found.
+- **Class imbalance:** malignant outnumbers benign roughly 2.2:1 overall;
+  within malignant subtypes, ductal_carcinoma alone is ~64% of all
+  malignant images, a ~6:1 ratio against the smallest subtype
+  (papillary_carcinoma). The subtype classifier's training loss is
+  class-weighted (inverse frequency) to counteract this; see
+  `src/training/train_subtype.py`.
+- **Patient/slide-level leakage:** prevented by construction — all splits
+  (`src/data/splits.py`) are made by grouping images by patient ID first,
+  then splitting patients (not images) into train/val/test, since
+  multiple images from the same patient/slide are highly correlated.
 
 ## Limitations
 
@@ -37,6 +112,19 @@ correlated.
 - **No calibration guarantee.** Predicted probabilities are not verified to
   be well-calibrated; the single-logit threshold (0.5) is a default, not a
   clinically validated operating point.
+- **Subtype coverage is partial by dataset necessity, not by choice.** Only
+  4 of the 11 clinically-recognized malignant subtypes commonly discussed
+  are available (see "Available classes" above). A malignant prediction on
+  a genuinely rare subtype not in this list will still be forced into one
+  of the four available bins by the subtype classifier — there is no
+  "other/unknown subtype" option, since the model was never trained to
+  recognize that its coverage is incomplete.
+- **Input validation is a heuristic, not a trained classifier.** Stage 1
+  (`src/serving/input_guard.py`) screens for H&E-characteristic color and
+  texture; it catches ordinary photos, cartoons, and blank images but is
+  not a real out-of-distribution detector — an adversarial or unusual image
+  could still pass through to stages 2-3 and receive a meaningless
+  confident label.
 - **Subtype-specific failure mode.** Error analysis on the 40x model found
   its most confident mistakes concentrated almost entirely on one benign
   subtype (`tubular_adenoma`), predicted malignant with near-certainty.
