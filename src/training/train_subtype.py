@@ -85,7 +85,6 @@ def run_training(
     device: str = "cpu",
     pretrained: bool = True,
 ) -> float:
-    import torch
     import mlflow
 
     train_loader, val_loader = build_dataloaders(
@@ -93,8 +92,13 @@ def run_training(
     )
 
     model = MalignantSubtypeClassifier(num_classes=NUM_SUBTYPES, pretrained=pretrained).to(device)
-    weights = torch.tensor(_class_weights(train_loader.dataset.samples), dtype=torch.float32)
-    criterion = nn.CrossEntropyLoss(weight=weights)
+    # Plain (unweighted) loss on purpose: the WeightedRandomSampler in
+    # build_dataloaders already makes the classes roughly equiprobable in
+    # every batch. Applying inverse-frequency weights on top would correct
+    # the same imbalance twice and push the model to over-predict the rare
+    # subtypes. Label smoothing instead, as mild regularization against
+    # overconfidence on a 4-6-training-patient class.
+    criterion = nn.CrossEntropyLoss(label_smoothing=0.05)
     optimizer = optim.Adam(
         model.parameters(), lr=float(config["learning_rate"]), weight_decay=float(config["weight_decay"])
     )
