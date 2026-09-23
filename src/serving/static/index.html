@@ -170,6 +170,15 @@
     font-size: 0.85rem;
     margin-top: 2px;
   }
+  #subtype-section .subtype-caveat {
+    background: var(--danger-bg);
+    border: 1px solid var(--danger-border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 0.78rem;
+    line-height: 1.4;
+    margin-top: 10px;
+  }
   .bar-track {
     height: 8px;
     border-radius: 4px;
@@ -251,6 +260,17 @@
     <div id="subtype-section">
       <div class="subtype-label" id="subtype-label"></div>
       <div class="subtype-confidence" id="subtype-confidence"></div>
+      <div class="subtype-caveat">
+        <strong>Subtype prediction is not statistically validated.</strong>
+        BreakHis contains only 5 lobular, 6 papillary and 9 mucinous
+        carcinoma patients in total, so a patient-level split leaves about
+        one patient per class to validate against — far too few to measure
+        subtype accuracy meaningfully. Treat this as a demonstration of the
+        pipeline, not a reliable subtype call. Only these four subtypes
+        exist in the dataset; DCIS, LCIS, inflammatory, Paget, metaplastic,
+        cribriform and tubular carcinoma are not represented, and an image
+        of one of those would still be forced into one of the four.
+      </div>
     </div>
     <figure>
       <img id="result-overlay" alt="Grad-CAM overlay highlighting regions that influenced the prediction" />
