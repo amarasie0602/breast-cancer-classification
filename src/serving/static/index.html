@@ -6,282 +6,559 @@
 <title>Breast Cancer Histopathology Classifier</title>
 <style>
   :root {
-    --bg: #f7f7f9;
+    --bg: #eef2f6;
     --panel: #ffffff;
-    --border: #e2e2e7;
-    --text: #1c1c22;
-    --muted: #6b6b76;
-    --accent: #4a5cf0;
-    --benign: #1a8f5e;
-    --malignant: #c0392b;
-    --danger-bg: #fdecea;
-    --danger-border: #f4c7c3;
+    --panel-alt: #f7fafc;
+    --border: #d6dee7;
+    --border-strong: #b8c6d4;
+    --text: #12212f;
+    --muted: #5c7084;
+    --clinical: #0b6a8f;
+    --clinical-dark: #075472;
+    --clinical-soft: #e3f0f7;
+    --benign: #0f7a5a;
+    --benign-soft: #e2f4ee;
+    --malignant: #b3372c;
+    --malignant-soft: #fdecea;
+    --warn: #8a5a00;
+    --warn-soft: #fdf3e0;
+    --warn-border: #edd7a6;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
-      --bg: #15151a;
-      --panel: #1e1e25;
-      --border: #303038;
-      --text: #eaeaf0;
-      --muted: #9a9aa5;
-      --danger-bg: #3a201f;
-      --danger-border: #5c2b28;
+      --bg: #0e151c;
+      --panel: #151f29;
+      --panel-alt: #1a2631;
+      --border: #27353f;
+      --border-strong: #35485a;
+      --text: #e6edf3;
+      --muted: #9ab0c2;
+      --clinical: #4cadd8;
+      --clinical-dark: #7cc6e6;
+      --clinical-soft: #102c3b;
+      --benign: #47c79c;
+      --benign-soft: #10302a;
+      --malignant: #f0806f;
+      --malignant-soft: #351d1c;
+      --warn: #e5b45c;
+      --warn-soft: #2e2313;
+      --warn-border: #4d3d1d;
     }
   }
   :root[data-theme="dark"] {
-    --bg: #15151a;
-    --panel: #1e1e25;
-    --border: #303038;
-    --text: #eaeaf0;
-    --muted: #9a9aa5;
-    --danger-bg: #3a201f;
-    --danger-border: #5c2b28;
+    --bg: #0e151c;
+    --panel: #151f29;
+    --panel-alt: #1a2631;
+    --border: #27353f;
+    --border-strong: #35485a;
+    --text: #e6edf3;
+    --muted: #9ab0c2;
+    --clinical: #4cadd8;
+    --clinical-dark: #7cc6e6;
+    --clinical-soft: #102c3b;
+    --benign: #47c79c;
+    --benign-soft: #10302a;
+    --malignant: #f0806f;
+    --malignant-soft: #351d1c;
+    --warn: #e5b45c;
+    --warn-soft: #2e2313;
+    --warn-border: #4d3d1d;
   }
+
   * { box-sizing: border-box; }
   body {
     margin: 0;
     background: var(--bg);
     color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    padding: 16px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
   }
-  main {
-    max-width: 720px;
-    margin: 0 auto;
-  }
-  h1 {
-    font-size: 1.4rem;
-    margin: 24px 0 4px;
-  }
-  .subtitle {
-    color: var(--muted);
-    font-size: 0.9rem;
-    margin-bottom: 16px;
-  }
-  .disclaimer {
-    background: var(--danger-bg);
-    border: 1px solid var(--danger-border);
-    border-radius: 10px;
-    padding: 12px 14px;
-    font-size: 0.85rem;
-    margin-bottom: 20px;
-    line-height: 1.4;
-  }
-  .panel {
+
+  /* ---------- Masthead ---------- */
+  .masthead {
     background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 20px;
-    margin-bottom: 16px;
+    border-bottom: 3px solid var(--clinical);
+    padding: 14px 16px;
   }
-  label {
-    display: block;
-    font-size: 0.85rem;
-    font-weight: 600;
-    margin-bottom: 6px;
+  .masthead-inner {
+    max-width: 900px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
   }
-  .dropzone {
-    border: 2px dashed var(--border);
-    border-radius: 10px;
-    padding: 28px 16px;
-    text-align: center;
+  .mark {
+    width: 38px;
+    height: 38px;
+    flex: 0 0 38px;
+    border-radius: 8px;
+    background: var(--clinical-soft);
+    display: grid;
+    place-items: center;
+    color: var(--clinical);
+  }
+  .titles h1 {
+    font-size: 1.06rem;
+    margin: 0;
+    letter-spacing: 0.01em;
+  }
+  .titles p {
+    margin: 1px 0 0;
+    font-size: 0.78rem;
+    color: var(--muted);
+  }
+  .ruo-badge {
+    margin-left: auto;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--warn);
+    background: var(--warn-soft);
+    border: 1px solid var(--warn-border);
+    padding: 5px 10px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+
+  main { max-width: 900px; margin: 0 auto; padding: 16px 16px 40px; }
+
+  .notice {
+    background: var(--warn-soft);
+    border: 1px solid var(--warn-border);
+    border-left: 4px solid var(--warn);
+    border-radius: 6px;
+    padding: 11px 13px;
+    font-size: 0.8rem;
+    margin: 16px 0;
+  }
+  .notice strong { color: var(--warn); }
+  .notice details { margin-top: 6px; }
+  .notice summary {
     cursor: pointer;
     color: var(--muted);
-    font-size: 0.9rem;
-    transition: border-color 0.15s, color 0.15s;
+    font-size: 0.76rem;
+  }
+  .notice details p { margin: 7px 0 0; color: var(--muted); }
+
+  /* ---------- Pipeline strip ---------- */
+  .pipeline {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .stage {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 9px 11px;
+    font-size: 0.74rem;
+  }
+  .stage .num {
+    font-family: var(--mono);
+    font-size: 0.66rem;
+    color: var(--muted);
+    letter-spacing: 0.06em;
+  }
+  .stage .nm { display: block; font-weight: 600; margin-top: 1px; }
+  .stage .st { color: var(--muted); font-size: 0.72rem; }
+  .stage[data-state="ok"] { border-color: var(--benign); background: var(--benign-soft); }
+  .stage[data-state="ok"] .st { color: var(--benign); font-weight: 600; }
+  .stage[data-state="fail"] { border-color: var(--malignant); background: var(--malignant-soft); }
+  .stage[data-state="fail"] .st { color: var(--malignant); font-weight: 600; }
+  .stage[data-state="skip"] { border-color: var(--warn-border); background: var(--warn-soft); }
+  .stage[data-state="skip"] .st { color: var(--warn); font-weight: 600; }
+  .stage[data-state="busy"] { border-color: var(--clinical); background: var(--clinical-soft); }
+  .stage[data-state="busy"] .st { color: var(--clinical); font-weight: 600; }
+
+  /* ---------- Cards ---------- */
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 16px;
+    overflow: hidden;
+  }
+  .card-head {
+    background: var(--panel-alt);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 16px;
+    font-size: 0.74rem;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .card-body { padding: 16px; }
+
+  label.field {
+    display: block;
+    font-size: 0.76rem;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 6px;
+  }
+
+  .dropzone {
+    border: 2px dashed var(--border-strong);
+    border-radius: 8px;
+    padding: 26px 16px;
+    text-align: center;
+    cursor: pointer;
+    background: var(--panel-alt);
+    transition: border-color .15s, background .15s;
   }
   .dropzone:hover, .dropzone.dragover {
-    border-color: var(--accent);
-    color: var(--accent);
+    border-color: var(--clinical);
+    background: var(--clinical-soft);
   }
+  .dropzone:focus-visible { outline: 3px solid var(--clinical); outline-offset: 2px; }
+  .dropzone svg { color: var(--clinical); margin-bottom: 6px; }
+  .dropzone .dz-main { display: block; font-weight: 600; font-size: 0.9rem; }
+  .dropzone .dz-sub { display: block; color: var(--muted); font-size: 0.76rem; margin-top: 3px; }
   .dropzone input { display: none; }
   #preview {
     max-width: 100%;
-    max-height: 220px;
-    border-radius: 8px;
+    max-height: 190px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
     margin-top: 12px;
     display: none;
   }
-  select, button {
-    font: inherit;
-  }
+
+  .row { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 14px; }
+  .row > div { flex: 1 1 180px; }
   select {
     width: 100%;
-    padding: 8px 10px;
-    border-radius: 8px;
-    border: 1px solid var(--border);
+    padding: 9px 10px;
+    font: inherit;
+    font-size: 0.88rem;
+    border-radius: 6px;
+    border: 1px solid var(--border-strong);
     background: var(--panel);
     color: var(--text);
-    margin-bottom: 16px;
   }
-  button {
+  .hint { font-size: 0.73rem; color: var(--muted); margin-top: 5px; }
+
+  button.analyze {
     width: 100%;
-    padding: 12px;
-    border: none;
-    border-radius: 10px;
-    background: var(--accent);
-    color: white;
-    font-weight: 600;
-    cursor: pointer;
-  }
-  button:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-  #status {
-    min-height: 1.2em;
-    font-size: 0.9rem;
-    color: var(--muted);
-    margin-top: 10px;
-  }
-  #status.error { color: var(--malignant); }
-  #result {
-    display: none;
-  }
-  .verdict {
-    display: flex;
-    align-items: baseline;
-    gap: 10px;
-    margin-bottom: 4px;
-  }
-  .verdict .label {
-    font-size: 1.6rem;
+    margin-top: 16px;
+    padding: 13px;
+    font: inherit;
+    font-size: 0.93rem;
     font-weight: 700;
-    text-transform: capitalize;
+    letter-spacing: 0.02em;
+    border: none;
+    border-radius: 7px;
+    background: var(--clinical);
+    color: #fff;
+    cursor: pointer;
+    transition: background .15s;
   }
-  .verdict .label.benign { color: var(--benign); }
-  .verdict .label.malignant { color: var(--malignant); }
-  .verdict .confidence {
-    color: var(--muted);
-    font-size: 0.95rem;
+  button.analyze:hover:not(:disabled) { background: var(--clinical-dark); }
+  button.analyze:disabled { opacity: .45; cursor: not-allowed; }
+
+  #status { min-height: 1.3em; font-size: 0.83rem; color: var(--muted); margin-top: 10px; }
+  #status.error {
+    color: var(--malignant);
+    background: var(--malignant-soft);
+    border: 1px solid var(--malignant);
+    border-radius: 6px;
+    padding: 10px 12px;
+    font-weight: 600;
   }
-  #subtype-section {
-    display: none;
-    margin-bottom: 18px;
+  .spinner {
+    display: inline-block;
+    width: 12px; height: 12px;
+    margin-right: 7px;
+    border: 2px solid var(--border-strong);
+    border-top-color: var(--clinical);
+    border-radius: 50%;
+    animation: spin .7s linear infinite;
+    vertical-align: -1px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ---------- Report ---------- */
+  #report { display: none; }
+  .finding {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 16px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+  .finding.benign { background: var(--benign-soft); border-color: var(--benign); }
+  .finding.malignant { background: var(--malignant-soft); border-color: var(--malignant); }
+  .finding .dot { width: 12px; height: 12px; border-radius: 50%; flex: 0 0 12px; }
+  .finding.benign .dot { background: var(--benign); }
+  .finding.malignant .dot { background: var(--malignant); }
+  .finding .txt { flex: 1 1 auto; min-width: 0; }
+  .finding .lbl { font-size: 1.3rem; font-weight: 700; line-height: 1.2; }
+  .finding.benign .lbl { color: var(--benign); }
+  .finding.malignant .lbl { color: var(--malignant); }
+  .finding .sub { font-size: 0.78rem; color: var(--muted); margin-top: 2px; }
+  .finding .pct {
+    font-family: var(--mono);
+    font-size: 1.5rem;
+    font-weight: 700;
+    text-align: right;
+  }
+  .finding.benign .pct { color: var(--benign); }
+  .finding.malignant .pct { color: var(--malignant); }
+
+  .probs { margin-top: 16px; }
+  .prob-row {
+    display: grid;
+    grid-template-columns: 120px 1fr 62px;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+    font-size: 0.8rem;
+  }
+  .prob-row .nm { color: var(--muted); font-weight: 600; }
+  .prob-row .val { font-family: var(--mono); text-align: right; }
+  .track { height: 9px; border-radius: 5px; background: var(--border); overflow: hidden; }
+  .fill { height: 100%; border-radius: 5px; }
+  .fill.benign { background: var(--benign); }
+  .fill.malignant { background: var(--malignant); }
+
+  .kv {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 10px;
+    margin-top: 16px;
     padding-top: 14px;
     border-top: 1px solid var(--border);
   }
-  #subtype-section .subtype-label {
-    font-weight: 600;
-    font-size: 1.05rem;
-  }
-  #subtype-section .subtype-confidence {
+  .kv div .k {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
     color: var(--muted);
-    font-size: 0.85rem;
-    margin-top: 2px;
+    font-weight: 700;
   }
-  #subtype-section .subtype-caveat {
-    background: var(--danger-bg);
-    border: 1px solid var(--danger-border);
-    border-radius: 8px;
-    padding: 8px 10px;
-    font-size: 0.78rem;
-    line-height: 1.4;
+  .kv div .v { font-family: var(--mono); font-size: 0.86rem; margin-top: 2px; }
+
+  #subtype-section { display: none; }
+  .subtype-head {
+    display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  }
+  .subtype-label { font-size: 1.02rem; font-weight: 700; }
+  .subtype-confidence { font-family: var(--mono); font-size: 0.86rem; color: var(--muted); }
+  .subtype-caveat {
+    background: var(--warn-soft);
+    border: 1px solid var(--warn-border);
+    border-left: 4px solid var(--warn);
+    border-radius: 6px;
+    padding: 10px 12px;
+    font-size: 0.76rem;
+    line-height: 1.45;
     margin-top: 10px;
+    color: var(--muted);
   }
-  .bar-track {
-    height: 8px;
-    border-radius: 4px;
-    background: var(--border);
-    overflow: hidden;
-    margin: 10px 0 18px;
-  }
-  .bar-fill {
-    height: 100%;
-    border-radius: 4px;
-  }
-  .bar-fill.benign { background: var(--benign); }
-  .bar-fill.malignant { background: var(--malignant); }
-  figure {
-    margin: 0;
-  }
-  figure img {
-    width: 100%;
-    border-radius: 10px;
-    display: block;
-  }
-  figcaption {
+  .subtype-caveat strong { color: var(--warn); }
+  .unavailable {
     font-size: 0.8rem;
     color: var(--muted);
-    margin-top: 6px;
+    background: var(--panel-alt);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 11px 13px;
   }
+
+  figure { margin: 0; }
+  figure img { width: 100%; border-radius: 6px; border: 1px solid var(--border); display: block; }
+  figcaption { font-size: 0.75rem; color: var(--muted); margin-top: 8px; line-height: 1.45; }
+
   footer {
-    text-align: center;
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 0 16px 28px;
     color: var(--muted);
     font-size: 0.75rem;
-    margin: 24px 0 8px;
+    text-align: center;
+  }
+  footer a { color: var(--clinical); text-decoration: none; }
+  footer a:hover { text-decoration: underline; }
+
+  @media (max-width: 560px) {
+    .pipeline { grid-template-columns: 1fr; }
+    .finding { flex-wrap: wrap; }
+    .finding .pct { text-align: left; }
+    .prob-row { grid-template-columns: 96px 1fr 54px; }
   }
 </style>
 </head>
 <body>
-<main>
-  <h1>Breast Cancer Histopathology Classifier</h1>
-  <p class="subtitle">Upload a breast histology image for a 3-stage prediction: image validation, benign/malignant classification, and (for malignant results) cancer subtype.</p>
 
-  <div class="disclaimer">
-    <strong>Research and educational purposes only — not a medical diagnosis.</strong>
-    This is a research/coursework project demonstrating an MLOps pipeline. It
-    has not undergone clinical validation and must not be used to inform
-    real patient care or treatment decisions. "Benign" here means a
-    non-cancerous tumor, not confirmed-healthy tissue — this dataset
-    contains no normal/healthy tissue images at all, only benign and
-    malignant tumor specimens. The model does not estimate ER, PR, HER2, or
-    triple-negative status.
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="mark" aria-hidden="true">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <path d="M6 2v6a6 6 0 0 0 12 0V2"/><path d="M4 2h4M16 2h4"/><circle cx="12" cy="19" r="3"/><path d="M12 14v2"/>
+      </svg>
+    </div>
+    <div class="titles">
+      <h1>Breast Cancer Histopathology Classifier</h1>
+      <p>Automated analysis of H&amp;E-stained breast tissue — BreakHis / ResNet50</p>
+    </div>
+    <span class="ruo-badge">Research use only</span>
+  </div>
+</header>
+
+<main>
+  <div class="notice">
+    <strong>Not a medical diagnosis.</strong>
+    Research and educational use only. This model has not undergone clinical
+    validation and must not inform patient care or treatment decisions.
+    <details>
+      <summary>What the labels do and don't mean</summary>
+      <p>
+        <strong>“Benign” means a non-cancerous tumour, not healthy tissue.</strong>
+        Every image in this dataset comes from a tumour biopsy — it contains no
+        normal tissue at all, so the model has never seen a healthy sample.
+        The model also does not estimate ER, PR, HER2 or triple-negative status,
+        which require immunohistochemistry rather than H&amp;E morphology.
+      </p>
+    </details>
   </div>
 
-  <form id="predict-form" class="panel">
-    <label for="file-input">Histopathology image</label>
-    <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Choose an image file" onkeydown="handleDropzoneKey(event)">
-      <span id="dropzone-text">Click to choose a file, or drag one here</span>
-      <input type="file" id="file-input" accept="image/*" />
-      <img id="preview" alt="Selected image preview" />
+  <div class="pipeline" id="pipeline">
+    <div class="stage" id="stage-1" data-state="idle">
+      <span class="num">STAGE 1</span>
+      <span class="nm">Image validation</span>
+      <span class="st" id="stage-1-status">Awaiting image</span>
     </div>
+    <div class="stage" id="stage-2" data-state="idle">
+      <span class="num">STAGE 2</span>
+      <span class="nm">Benign vs malignant</span>
+      <span class="st" id="stage-2-status">Not run</span>
+    </div>
+    <div class="stage" id="stage-3" data-state="idle">
+      <span class="num">STAGE 3</span>
+      <span class="nm">Malignant subtype</span>
+      <span class="st" id="stage-3-status">Not run</span>
+    </div>
+  </div>
 
-    <label for="magnification" style="margin-top:16px;">Magnification</label>
-    <select id="magnification" name="magnification">
-      <option value="40">40x</option>
-      <option value="100">100x</option>
-      <option value="200">200x</option>
-      <option value="400">400x</option>
-    </select>
+  <form id="predict-form" class="card">
+    <div class="card-head">Specimen input</div>
+    <div class="card-body">
+      <label class="field" for="file-input">Histopathology image</label>
+      <div class="dropzone" id="dropzone" tabindex="0" role="button"
+           aria-label="Choose a histopathology image file" onkeydown="handleDropzoneKey(event)">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v13"/>
+        </svg>
+        <span class="dz-main" id="dropzone-text">Select or drop an image</span>
+        <span class="dz-sub">H&amp;E-stained breast histology · PNG or JPEG</span>
+        <input type="file" id="file-input" accept="image/*" />
+        <img id="preview" alt="Selected specimen preview" />
+      </div>
 
-    <button type="submit" id="submit-btn" disabled>Classify image</button>
-    <div id="status" role="status" aria-live="polite"></div>
+      <div class="row">
+        <div>
+          <label class="field" for="magnification">Magnification</label>
+          <select id="magnification" name="magnification">
+            <option value="40">40× — low power</option>
+            <option value="100">100×</option>
+            <option value="200">200×</option>
+            <option value="400">400× — high power</option>
+          </select>
+          <p class="hint">Recorded with the result; the served model is selected at deployment.</p>
+        </div>
+      </div>
+
+      <button type="submit" class="analyze" id="submit-btn" disabled>Analyse specimen</button>
+      <div id="status" role="status" aria-live="polite"></div>
+    </div>
   </form>
 
-  <section id="result" class="panel" aria-live="polite">
-    <div class="verdict">
-      <span class="label" id="result-label"></span>
-      <span class="confidence" id="result-confidence"></span>
-    </div>
-    <div class="bar-track">
-      <div class="bar-fill" id="result-bar"></div>
-    </div>
-    <div id="subtype-section">
-      <div class="subtype-label" id="subtype-label"></div>
-      <div class="subtype-confidence" id="subtype-confidence"></div>
-      <div class="subtype-caveat" id="subtype-caveat">
-        <strong>Subtype prediction is not statistically validated.</strong>
-        BreakHis contains only 5 lobular, 6 papillary and 9 mucinous
-        carcinoma patients in total, so a patient-level split leaves about
-        one patient per class to validate against — far too few to measure
-        subtype accuracy meaningfully. Treat this as a demonstration of the
-        pipeline, not a reliable subtype call. Only these four subtypes
-        exist in the dataset; DCIS, LCIS, inflammatory, Paget, metaplastic,
-        cribriform and tubular carcinoma are not represented, and an image
-        of one of those would still be forced into one of the four.
+  <section id="report" aria-live="polite">
+    <div class="card">
+      <div class="card-head">Classification result</div>
+      <div class="card-body">
+        <div class="finding" id="finding">
+          <span class="dot" aria-hidden="true"></span>
+          <span class="txt">
+            <span class="lbl" id="result-label"></span>
+            <span class="sub" id="result-sub"></span>
+          </span>
+          <span class="pct" id="result-confidence"></span>
+        </div>
+
+        <div class="probs">
+          <div class="prob-row">
+            <span class="nm">Benign</span>
+            <span class="track"><span class="fill benign" id="bar-benign"></span></span>
+            <span class="val" id="val-benign"></span>
+          </div>
+          <div class="prob-row">
+            <span class="nm">Malignant</span>
+            <span class="track"><span class="fill malignant" id="bar-malignant"></span></span>
+            <span class="val" id="val-malignant"></span>
+          </div>
+        </div>
+
+        <div class="kv">
+          <div><span class="k">Magnification</span><span class="v" id="kv-mag"></span></div>
+          <div><span class="k">Decision threshold</span><span class="v">0.50</span></div>
+          <div><span class="k">Specimen</span><span class="v" id="kv-file"></span></div>
+        </div>
       </div>
     </div>
-    <figure>
-      <img id="result-overlay" alt="Grad-CAM overlay highlighting regions that influenced the prediction" />
-      <figcaption>Grad-CAM overlay — highlighted regions influenced the prediction most. Illustrative only, not verification that the model reasoned about clinically relevant features.</figcaption>
-    </figure>
-  </section>
 
-  <footer>
-    <a href="/health">/health</a> &middot; <a href="/metrics">/metrics</a> &middot; <a href="/docs">API docs</a>
-  </footer>
+    <div class="card" id="subtype-section">
+      <div class="card-head">Malignant subtype</div>
+      <div class="card-body">
+        <div id="subtype-present">
+          <div class="subtype-head">
+            <span class="subtype-label" id="subtype-label"></span>
+            <span class="subtype-confidence" id="subtype-confidence"></span>
+          </div>
+          <div class="subtype-caveat" id="subtype-caveat">
+            <strong>Not statistically validated.</strong>
+            BreakHis contains only 5 lobular, 6 papillary and 9 mucinous
+            carcinoma patients in total, leaving roughly one patient per class
+            to validate against. Only these four subtypes exist in the dataset —
+            DCIS, LCIS, inflammatory, Paget, metaplastic, cribriform and tubular
+            carcinoma are not represented, and an image of one of those would
+            still be forced into one of the four.
+          </div>
+        </div>
+        <div class="unavailable" id="subtype-unavailable"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">Grad-CAM attention map</div>
+      <div class="card-body">
+        <figure>
+          <img id="result-overlay" alt="Grad-CAM heat map over the specimen, showing regions that most influenced the classification" />
+          <figcaption>
+            Warmer regions influenced the prediction most. Illustrative only —
+            a plausible-looking heat map is not evidence that the model reasoned
+            about clinically meaningful features.
+          </figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
 </main>
+
+<footer>
+  <a href="/health">Service health</a> ·
+  <a href="/metrics">Prediction metrics</a> ·
+  <a href="/docs">API reference</a>
+</footer>
 
 <script>
   const dropzone = document.getElementById("dropzone");
@@ -291,23 +568,47 @@
   const form = document.getElementById("predict-form");
   const submitBtn = document.getElementById("submit-btn");
   const statusEl = document.getElementById("status");
-  const resultEl = document.getElementById("result");
+  const reportEl = document.getElementById("report");
+  const finding = document.getElementById("finding");
   const resultLabel = document.getElementById("result-label");
+  const resultSub = document.getElementById("result-sub");
   const resultConfidence = document.getElementById("result-confidence");
-  const resultBar = document.getElementById("result-bar");
   const resultOverlay = document.getElementById("result-overlay");
   const subtypeSection = document.getElementById("subtype-section");
+  const subtypePresent = document.getElementById("subtype-present");
+  const subtypeUnavailable = document.getElementById("subtype-unavailable");
   const subtypeLabel = document.getElementById("subtype-label");
   const subtypeConfidence = document.getElementById("subtype-confidence");
-  const subtypeCaveat = document.getElementById("subtype-caveat");
 
   const DISPLAY_LABEL = { benign: "Benign", malignant: "Malignant (Cancer)" };
+  const SUB_TEXT = {
+    benign: "No malignancy detected in this image",
+    malignant: "Features consistent with carcinoma",
+  };
 
   let selectedFile = null;
 
+  function setStage(n, state, text) {
+    document.getElementById("stage-" + n).dataset.state = state;
+    document.getElementById("stage-" + n + "-status").textContent = text;
+  }
+
+  function resetStages(text) {
+    setStage(1, "idle", text);
+    setStage(2, "idle", "Not run");
+    setStage(3, "idle", "Not run");
+  }
+
   function setStatus(message, isError) {
-    statusEl.textContent = message || "";
+    statusEl.innerHTML = "";
     statusEl.classList.toggle("error", Boolean(isError));
+    if (!message) return;
+    statusEl.textContent = message;
+  }
+
+  function setBusy(message) {
+    statusEl.classList.remove("error");
+    statusEl.innerHTML = '<span class="spinner"></span>' + message;
   }
 
   function selectFile(file) {
@@ -315,10 +616,10 @@
     selectedFile = file;
     submitBtn.disabled = false;
     dropzoneText.textContent = file.name;
-    const url = URL.createObjectURL(file);
-    preview.src = url;
+    preview.src = URL.createObjectURL(file);
     preview.style.display = "block";
-    resultEl.style.display = "none";
+    reportEl.style.display = "none";
+    resetStages("Ready");
     setStatus("");
   }
 
@@ -348,13 +649,64 @@
     if (file) selectFile(file);
   });
 
+  function renderReport(data) {
+    const malignantP = data.probability;
+    const benignP = 1 - malignantP;
+    const shown = data.label === "malignant" ? malignantP : benignP;
+
+    finding.className = "finding " + data.label;
+    resultLabel.textContent = DISPLAY_LABEL[data.label] || data.label;
+    resultSub.textContent = SUB_TEXT[data.label] || "";
+    resultConfidence.textContent = (shown * 100).toFixed(1) + "%";
+
+    document.getElementById("bar-benign").style.width = (benignP * 100).toFixed(1) + "%";
+    document.getElementById("bar-malignant").style.width = (malignantP * 100).toFixed(1) + "%";
+    document.getElementById("val-benign").textContent = (benignP * 100).toFixed(1) + "%";
+    document.getElementById("val-malignant").textContent = (malignantP * 100).toFixed(1) + "%";
+
+    document.getElementById("kv-mag").textContent = data.magnification + "×";
+    document.getElementById("kv-file").textContent = selectedFile ? selectedFile.name : "—";
+
+    resultOverlay.src = "data:image/png;base64," + data.gradcam_overlay_base64;
+
+    setStage(1, "ok", "Valid histology");
+    setStage(2, data.label === "malignant" ? "fail" : "ok", DISPLAY_LABEL[data.label]);
+
+    if (data.label !== "malignant") {
+      subtypeSection.style.display = "none";
+      setStage(3, "idle", "Not applicable");
+    } else if (data.subtype) {
+      subtypeLabel.textContent = data.subtype_display_name || data.subtype;
+      subtypeConfidence.textContent =
+        (data.subtype_confidence * 100).toFixed(1) + "% confidence";
+      subtypePresent.style.display = "block";
+      subtypeUnavailable.style.display = "none";
+      subtypeSection.style.display = "block";
+      setStage(3, "fail", data.subtype_display_name || data.subtype);
+    } else if (data.subtype_unavailable_reason) {
+      subtypePresent.style.display = "none";
+      subtypeUnavailable.textContent = data.subtype_unavailable_reason;
+      subtypeUnavailable.style.display = "block";
+      subtypeSection.style.display = "block";
+      setStage(3, "skip", "Not reported");
+    } else {
+      subtypeSection.style.display = "none";
+      setStage(3, "idle", "Unavailable");
+    }
+
+    reportEl.style.display = "block";
+  }
+
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     if (!selectedFile) return;
 
     submitBtn.disabled = true;
-    setStatus("Running inference…");
-    resultEl.style.display = "none";
+    setBusy("Analysing specimen…");
+    reportEl.style.display = "none";
+    setStage(1, "busy", "Checking…");
+    setStage(2, "idle", "Queued");
+    setStage(3, "idle", "Queued");
 
     const formData = new FormData();
     formData.append("file", selectedFile);
@@ -368,36 +720,18 @@
           const body = await resp.json();
           detail = body.detail || detail;
         } catch (_) {}
+        if (resp.status === 422) {
+          setStage(1, "fail", "Rejected");
+        } else if (resp.status === 400) {
+          setStage(1, "fail", "Unreadable file");
+        } else {
+          setStage(1, "idle", "Not run");
+        }
+        setStage(2, "idle", "Not run");
+        setStage(3, "idle", "Not run");
         throw new Error(detail);
       }
-      const data = await resp.json();
-
-      const pct = data.label === "malignant" ? data.probability : 1 - data.probability;
-      resultLabel.textContent = DISPLAY_LABEL[data.label] || data.label;
-      resultLabel.className = "label " + data.label;
-      resultConfidence.textContent = (pct * 100).toFixed(1) + "% confidence";
-      resultBar.className = "bar-fill " + data.label;
-      resultBar.style.width = (pct * 100).toFixed(1) + "%";
-      resultOverlay.src = "data:image/png;base64," + data.gradcam_overlay_base64;
-
-      if (data.label === "malignant" && data.subtype) {
-        subtypeLabel.textContent = data.subtype_display_name || data.subtype;
-        subtypeConfidence.textContent =
-          "Subtype confidence: " + (data.subtype_confidence * 100).toFixed(1) + "%";
-        subtypeCaveat.style.display = "block";
-        subtypeSection.style.display = "block";
-      } else if (data.label === "malignant" && data.subtype_unavailable_reason) {
-        subtypeLabel.textContent = "Subtype not reported";
-        subtypeConfidence.textContent = data.subtype_unavailable_reason;
-        // The standing caveat is about a subtype we did show; here we
-        // deliberately showed none, and the reason above already says why.
-        subtypeCaveat.style.display = "none";
-        subtypeSection.style.display = "block";
-      } else {
-        subtypeSection.style.display = "none";
-      }
-
-      resultEl.style.display = "block";
+      renderReport(await resp.json());
       setStatus("");
     } catch (err) {
       setStatus(err.message || "Something went wrong.", true);
