@@ -1,7 +1,7 @@
 # Breast Cancer MLOps Pipeline
 
-[![CI](https://github.com/amarasie0602/breast-cancer-diagosis/actions/workflows/ci.yml/badge.svg)](https://github.com/amarasie0602/breast-cancer-diagosis/actions/workflows/ci.yml)
-[![CD](https://github.com/amarasie0602/breast-cancer-diagosis/actions/workflows/cd.yml/badge.svg)](https://github.com/amarasie0602/breast-cancer-diagosis/actions/workflows/cd.yml)
+[![CI](https://github.com/amarasie0602/breast-cancer-classification/actions/workflows/ci.yml/badge.svg)](https://github.com/amarasie0602/breast-cancer-classification/actions/workflows/ci.yml)
+[![CD](https://github.com/amarasie0602/breast-cancer-classification/actions/workflows/cd.yml/badge.svg)](https://github.com/amarasie0602/breast-cancer-classification/actions/workflows/cd.yml)
 
 3-stage breast cancer histopathology classification pipeline trained on the
 [BreakHis](https://web.inf.ufpr.br/vri/databases/breast-cancer-histopathological-database-breakhis/)
