@@ -16,7 +16,27 @@ versioning, automated testing, containerized serving, and CI/CD.
 3. **Malignant subtype** classification (Invasive Ductal Carcinoma,
    Invasive Lobular Carcinoma, Mucinous Carcinoma, or Papillary Carcinoma —
    the four subtypes BreakHis actually labels), only run when stage 2
-   predicts malignant.
+   predicts malignant. **Currently gated off**, see below.
+
+### Stage 3 reports no subtype, on purpose
+
+BreakHis has 38 ductal carcinoma patients but only 5 lobular, 6 papillary
+and 9 mucinous. With patient-level splits that leaves ~4 training patients
+for three of the four classes, and every configuration tried — two
+architectures, weighted loss vs balanced sampling, mild vs heavy
+augmentation — trains to at or below the 0.25 random baseline on
+validation. Unfreezing the backbone made validation *worse* while train
+loss fell, i.e. it memorizes patients rather than subtypes.
+
+So serving refuses to report a subtype unless a checkpoint clears
+`MIN_SUBTYPE_MACRO_F1` (default 0.55). Below that, `/predict` returns the
+benign/malignant result plus a `subtype_unavailable_reason` explaining
+why, rather than presenting a coin toss as a prediction. The measured
+numbers are in [docs/model_card.md](docs/model_card.md#limitations).
+
+A learnable version of this stage would be a coarser question with enough
+patients behind it — ductal (38 patients) vs all other malignant subtypes
+(20) — rather than the 4-way split.
 
 "Benign" means non-cancerous tumor, not healthy tissue — BreakHis contains
 no normal/healthy tissue images at all, only benign and malignant tumor
