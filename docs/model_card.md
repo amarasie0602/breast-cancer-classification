@@ -136,10 +136,38 @@ has as few as 135 images at a single magnification).
   ~1, so subtype macro F1 is dominated by which patients happened to land
   in which split, not by model quality. (Before `min_per_split` was added
   to the splitter, lobular_carcinoma had **zero** test patients at all.)
-  Any single subtype accuracy figure from this data should be read as a
-  demonstration that the pipeline runs end to end, not as a measurement.
   Patient-level k-fold cross-validation would give a more stable estimate
   but cannot manufacture patients that aren't in the dataset.
+- **The 4-class subtype model does not learn, and this was measured, not
+  assumed.** Random guessing across 4 classes scores about 0.25. Every
+  configuration tried lands at or below that on validation:
+
+  | Configuration | val macro F1 by epoch | val loss (chance ≈ 1.386) |
+  | --- | --- | --- |
+  | ResNet50, inverse-frequency weighted loss, mild augmentation | 0.062 → 0.082 → 0.082 | 1.99 → 2.13 → 2.21 |
+  | EfficientNet-B0, balanced sampling, heavy augmentation | 0.157 → 0.163 → 0.185 → 0.131 | 1.49 → 1.55 → 1.51 → 2.04 |
+
+  The second run's fourth epoch is the telling one: it is the first epoch
+  after the backbone unfroze, and validation macro F1 *fell* (0.185 →
+  0.131, accuracy 0.288 → 0.249, exactly chance) while train loss dropped
+  sharply (1.009 → 0.750). The model learns its four training patients per
+  class better and generalizes to an unseen patient worse. Varying the
+  architecture (25.6M vs 5.3M parameters), the imbalance strategy
+  (weighted loss vs balanced sampling), the augmentation strength, the
+  learning rate and the freeze schedule did not change this.
+
+  This is a property of the data, not of the hyperparameters: four training
+  patients is not enough to learn what distinguishes a subtype from a
+  patient. Accordingly, **serving refuses to report a subtype** unless a
+  checkpoint clears `MIN_SUBTYPE_MACRO_F1` (default 0.55); below that
+  `/predict` returns the benign/malignant result with a
+  `subtype_unavailable_reason` instead of dressing up a coin toss as a
+  finding.
+
+  The route to a working stage 3 on this dataset is a coarser question
+  with enough patients behind it — ductal carcinoma (38 patients) versus
+  all other malignant subtypes (20 patients) is a genuinely learnable and
+  validatable binary problem, unlike the 4-way split.
 - **Input validation is a heuristic, not a trained classifier.** Stage 1
   (`src/serving/input_guard.py`) screens for H&E-characteristic color and
   texture; it catches ordinary photos, cartoons, and blank images but is
