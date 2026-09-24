@@ -17,5 +17,10 @@ early_stopping:
   patience: 3
   min_delta: 0.001
 freeze_backbone_epochs: 1
-checkpoint_dir: checkpoints
+# Deliberately NOT checkpoints/: train.py writes best_mag{magnification}.pt
+# unconditionally, so pointing an experiment at the same directory silently
+# overwrites the production checkpoint with a half-trained one the first
+# time any epoch "improves" on nothing. That happened once already during
+# this experiment and was only recoverable because of a manual backup.
+checkpoint_dir: checkpoints/experiments/balanced
 balance_classes: true
