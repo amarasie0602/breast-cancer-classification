@@ -18,7 +18,7 @@ from src.explainability.overlay import cam_to_overlay
 from src.serving.input_guard import looks_like_histology
 from src.serving.logging_middleware import RequestLoggingMiddleware
 from src.serving.metrics import get_prediction_distribution, record_prediction
-from src.serving.model_loader import get_model, get_subtype_model
+from src.serving.model_loader import get_model, get_subtype_model, subtype_checkpoint_macro_f1
 from src.serving.schemas import PredictionResponse
 
 app = FastAPI(title="Breast Cancer Histopathology Classifier")
@@ -37,6 +37,15 @@ STATIC_DIR = Path(__file__).parent / "static"
 # whole curve to inform it.
 DECISION_THRESHOLD = float(os.environ.get("DECISION_THRESHOLD", "0.5"))
 
+# Stage 3 only reports a subtype if its checkpoint actually cleared this
+# validation macro F1. Random guessing over 4 classes scores ~0.25, and
+# both subtype training attempts landed at 0.08-0.19 -- so without this
+# gate the UI would render something like "Mucinous Carcinoma, 87%
+# confidence" out of what is effectively a coin toss. Below the bar,
+# /predict returns the benign/malignant result with subtype fields null
+# and says why, rather than dressing up noise as a finding.
+MIN_SUBTYPE_MACRO_F1 = float(os.environ.get("MIN_SUBTYPE_MACRO_F1", "0.55"))
+
 
 @app.get("/", include_in_schema=False)
 def index() -> FileResponse:
@@ -51,6 +60,33 @@ def health() -> Dict[str, str]:
 @app.get("/metrics")
 def metrics() -> Dict[str, Dict[str, int]]:
     return {"prediction_distribution": get_prediction_distribution()}
+
+
+def _classify_subtype(tensor):
+    """Stage 3. Returns (subtype, display_name, confidence) when a good
+    enough model is available, a string explaining why not when there is a
+    checkpoint but it didn't clear MIN_SUBTYPE_MACRO_F1, or None when no
+    subtype checkpoint is deployed at all."""
+    if not os.path.exists(SUBTYPE_CHECKPOINT_PATH):
+        return None
+
+    recorded_macro_f1 = subtype_checkpoint_macro_f1(SUBTYPE_CHECKPOINT_PATH)
+    if recorded_macro_f1 < MIN_SUBTYPE_MACRO_F1:
+        return (
+            "Subtype classification is unavailable: the available model scores "
+            f"{recorded_macro_f1:.2f} macro F1 on validation, below the "
+            f"{MIN_SUBTYPE_MACRO_F1:.2f} minimum (guessing at random across the 4 "
+            "subtypes scores about 0.25). BreakHis has only 4-6 training patients "
+            "for 3 of its 4 malignant subtypes, too few to learn a subtype "
+            "classifier that generalizes to a patient it has never seen."
+        )
+
+    model = get_subtype_model(SUBTYPE_CHECKPOINT_PATH)
+    with torch.no_grad():
+        probs = torch.softmax(model(tensor), dim=1)[0]
+    idx = int(probs.argmax().item())
+    name = SUBTYPE_NAMES[idx]
+    return name, SUBTYPE_DISPLAY_NAMES[name], float(probs[idx].item())
 
 
 @app.post("/predict", response_model=PredictionResponse)
@@ -90,17 +126,14 @@ async def predict(
     overlay.save(buf, format="PNG")
     overlay_base64 = base64.b64encode(buf.getvalue()).decode("utf-8")
 
-    subtype = subtype_display_name = None
+    subtype = subtype_display_name = subtype_unavailable_reason = None
     subtype_confidence = None
-    if label == "malignant" and os.path.exists(SUBTYPE_CHECKPOINT_PATH):
-        subtype_model = get_subtype_model(SUBTYPE_CHECKPOINT_PATH)
-        with torch.no_grad():
-            subtype_logits = subtype_model(tensor)
-            subtype_probs = torch.softmax(subtype_logits, dim=1)[0]
-        subtype_idx = int(subtype_probs.argmax().item())
-        subtype = SUBTYPE_NAMES[subtype_idx]
-        subtype_display_name = SUBTYPE_DISPLAY_NAMES[subtype]
-        subtype_confidence = float(subtype_probs[subtype_idx].item())
+    if label == "malignant":
+        subtype_result = _classify_subtype(tensor)
+        if isinstance(subtype_result, str):
+            subtype_unavailable_reason = subtype_result
+        elif subtype_result is not None:
+            subtype, subtype_display_name, subtype_confidence = subtype_result
 
     return PredictionResponse(
         label=label,
@@ -110,4 +143,5 @@ async def predict(
         subtype=subtype,
         subtype_display_name=subtype_display_name,
         subtype_confidence=subtype_confidence,
+        subtype_unavailable_reason=subtype_unavailable_reason,
     )

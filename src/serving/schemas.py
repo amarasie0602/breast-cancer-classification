@@ -13,3 +13,7 @@ class PredictionResponse(BaseModel):
     subtype: Optional[str] = None  # e.g. "ductal_carcinoma"; only set when label == "malignant"
     subtype_display_name: Optional[str] = None  # e.g. "Invasive Ductal Carcinoma (IDC)"
     subtype_confidence: Optional[float] = None
+    # Set when the malignant branch ran but no trustworthy subtype model
+    # was available, so the UI can explain the absence instead of just
+    # silently omitting stage 3.
+    subtype_unavailable_reason: Optional[str] = None

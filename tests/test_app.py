@@ -10,7 +10,7 @@ from torch import optim
 from src.data.dataset import SUBTYPE_NAMES
 from src.models.classifier import BreakHisClassifier, MalignantSubtypeClassifier
 from src.serving.app import app
-from src.serving.model_loader import get_model, get_subtype_model
+from src.serving.model_loader import get_model, get_subtype_model, subtype_checkpoint_macro_f1
 from src.training.checkpoint import save_checkpoint
 
 client = TestClient(app)
@@ -29,9 +29,10 @@ def _make_forced_binary_checkpoint(tmp_path, force_malignant: bool):
     return path
 
 
-def _make_forced_subtype_checkpoint(tmp_path, forced_index: int):
-    """A real MalignantSubtypeClassifier with its fc layer overridden to
-    always predict the same subtype, regardless of input."""
+def _make_forced_subtype_checkpoint(tmp_path, forced_index: int, macro_f1: float = 0.9):
+    """A real MalignantSubtypeClassifier with its head overridden to always
+    predict the same subtype, regardless of input. macro_f1 is recorded in
+    the checkpoint the way training does, since serving gates stage 3 on it."""
     model = MalignantSubtypeClassifier(num_classes=len(SUBTYPE_NAMES), pretrained=False)
     with torch.no_grad():
         head = model.backbone.classifier[-1]
@@ -39,7 +40,9 @@ def _make_forced_subtype_checkpoint(tmp_path, forced_index: int):
         head.bias.zero_()
         head.bias[forced_index] = 50.0
     path = tmp_path / "forced_subtype.pt"
-    save_checkpoint(path, model, optim.Adam(model.parameters()), epoch=0, metrics={})
+    save_checkpoint(
+        path, model, optim.Adam(model.parameters()), epoch=0, metrics={"macro_f1": macro_f1}
+    )
     return path
 
 
@@ -199,3 +202,47 @@ def test_predict_malignant_with_subtype_checkpoint_returns_subtype(monkeypatch, 
     assert body["subtype"] == "mucinous_carcinoma"
     assert body["subtype_display_name"] == "Mucinous Carcinoma"
     assert body["subtype_confidence"] > 0.99
+
+
+def test_predict_skips_subtype_when_checkpoint_is_below_quality_bar(monkeypatch, tmp_path):
+    """A subtype model at chance must not produce a confident-looking label."""
+    checkpoint_path = _make_forced_binary_checkpoint(tmp_path, force_malignant=True)
+    weak_subtype = _make_forced_subtype_checkpoint(tmp_path, forced_index=0, macro_f1=0.19)
+    get_model.cache_clear()
+    get_subtype_model.cache_clear()
+    subtype_checkpoint_macro_f1.cache_clear()
+    monkeypatch.setattr("src.serving.app.CHECKPOINT_PATH", str(checkpoint_path))
+    monkeypatch.setattr("src.serving.app.SUBTYPE_CHECKPOINT_PATH", str(weak_subtype))
+
+    resp = client.post(
+        "/predict",
+        files={"file": ("sample.png", _fake_histology_bytes(), "image/png")},
+        data={"magnification": "40"},
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["label"] == "malignant"
+    assert body["subtype"] is None
+    assert body["subtype_confidence"] is None
+    assert "0.19" in body["subtype_unavailable_reason"]
+
+
+def test_predict_reports_subtype_when_checkpoint_clears_the_bar(monkeypatch, tmp_path):
+    checkpoint_path = _make_forced_binary_checkpoint(tmp_path, force_malignant=True)
+    good_subtype = _make_forced_subtype_checkpoint(tmp_path, forced_index=1, macro_f1=0.80)
+    get_model.cache_clear()
+    get_subtype_model.cache_clear()
+    subtype_checkpoint_macro_f1.cache_clear()
+    monkeypatch.setattr("src.serving.app.CHECKPOINT_PATH", str(checkpoint_path))
+    monkeypatch.setattr("src.serving.app.SUBTYPE_CHECKPOINT_PATH", str(good_subtype))
+
+    resp = client.post(
+        "/predict",
+        files={"file": ("sample.png", _fake_histology_bytes(), "image/png")},
+        data={"magnification": "40"},
+    )
+
+    body = resp.json()
+    assert body["subtype"] == "lobular_carcinoma"
+    assert body["subtype_unavailable_reason"] is None

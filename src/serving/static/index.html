@@ -260,7 +260,7 @@
     <div id="subtype-section">
       <div class="subtype-label" id="subtype-label"></div>
       <div class="subtype-confidence" id="subtype-confidence"></div>
-      <div class="subtype-caveat">
+      <div class="subtype-caveat" id="subtype-caveat">
         <strong>Subtype prediction is not statistically validated.</strong>
         BreakHis contains only 5 lobular, 6 papillary and 9 mucinous
         carcinoma patients in total, so a patient-level split leaves about
@@ -299,6 +299,7 @@
   const subtypeSection = document.getElementById("subtype-section");
   const subtypeLabel = document.getElementById("subtype-label");
   const subtypeConfidence = document.getElementById("subtype-confidence");
+  const subtypeCaveat = document.getElementById("subtype-caveat");
 
   const DISPLAY_LABEL = { benign: "Benign", malignant: "Malignant (Cancer)" };
 
@@ -383,6 +384,14 @@
         subtypeLabel.textContent = data.subtype_display_name || data.subtype;
         subtypeConfidence.textContent =
           "Subtype confidence: " + (data.subtype_confidence * 100).toFixed(1) + "%";
+        subtypeCaveat.style.display = "block";
+        subtypeSection.style.display = "block";
+      } else if (data.label === "malignant" && data.subtype_unavailable_reason) {
+        subtypeLabel.textContent = "Subtype not reported";
+        subtypeConfidence.textContent = data.subtype_unavailable_reason;
+        // The standing caveat is about a subtype we did show; here we
+        // deliberately showed none, and the reason above already says why.
+        subtypeCaveat.style.display = "none";
         subtypeSection.style.display = "block";
       } else {
         subtypeSection.style.display = "none";
