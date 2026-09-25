@@ -11,14 +11,19 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from PIL import Image, UnidentifiedImageError
 
-from src.data.dataset import SUBTYPE_DISPLAY_NAMES, SUBTYPE_NAMES
+from src.data.dataset import SUBTYPE_SCHEMES
 from src.data.transforms import eval_transform
 from src.explainability.gradcam import GradCAM
 from src.explainability.overlay import cam_to_overlay
 from src.serving.input_guard import looks_like_histology
 from src.serving.logging_middleware import RequestLoggingMiddleware
 from src.serving.metrics import get_prediction_distribution, record_prediction
-from src.serving.model_loader import get_model, get_subtype_model, subtype_checkpoint_macro_f1
+from src.serving.model_loader import (
+    get_model,
+    get_subtype_model,
+    subtype_checkpoint_macro_f1,
+    subtype_checkpoint_scheme,
+)
 from src.serving.schemas import PredictionResponse
 
 app = FastAPI(title="Breast Cancer Histopathology Classifier")
@@ -56,6 +61,15 @@ DECISION_THRESHOLD = float(os.environ.get("DECISION_THRESHOLD", "0.5"))
 # and says why, rather than dressing up noise as a finding.
 MIN_SUBTYPE_MACRO_F1 = float(os.environ.get("MIN_SUBTYPE_MACRO_F1", "0.55"))
 
+# The bar has to sit well above what guessing scores, and that depends on the
+# number of classes: random guessing gets ~0.25 macro F1 over 4 classes but
+# ~0.50 over 2. A 2-class model at 0.55 would be barely better than a coin, so
+# the ductal-vs-other scheme is held to a higher bar.
+MIN_MACRO_F1_BY_SCHEME = {
+    "four_subtypes": MIN_SUBTYPE_MACRO_F1,
+    "ductal_vs_other": float(os.environ.get("MIN_DUCTAL_VS_OTHER_MACRO_F1", "0.70")),
+}
+
 
 @app.get("/", include_in_schema=False)
 def index() -> FileResponse:
@@ -92,23 +106,27 @@ def _classify_subtype(tensor):
     if not os.path.exists(SUBTYPE_CHECKPOINT_PATH):
         return None
 
+    scheme = subtype_checkpoint_scheme(SUBTYPE_CHECKPOINT_PATH)
+    names = SUBTYPE_SCHEMES[scheme]["names"]
+    minimum = MIN_MACRO_F1_BY_SCHEME[scheme]
+    chance = 1 / len(names)
     recorded_macro_f1 = subtype_checkpoint_macro_f1(SUBTYPE_CHECKPOINT_PATH)
-    if recorded_macro_f1 < MIN_SUBTYPE_MACRO_F1:
+    if recorded_macro_f1 < minimum:
         return (
             "Subtype classification is unavailable: the available model scores "
-            f"{recorded_macro_f1:.2f} macro F1 on validation, below the "
-            f"{MIN_SUBTYPE_MACRO_F1:.2f} minimum (guessing at random across the 4 "
-            "subtypes scores about 0.25). BreakHis has only 4-6 training patients "
-            "for 3 of its 4 malignant subtypes, too few to learn a subtype "
-            "classifier that generalizes to a patient it has never seen."
+            f"{recorded_macro_f1:.2f} macro F1 on validation, below the {minimum:.2f} "
+            f"minimum (guessing at random across {len(names)} classes scores about "
+            f"{chance:.2f}). BreakHis has only 4-6 training patients for 3 of its 4 "
+            "malignant subtypes, too few to learn a subtype classifier that "
+            "generalizes to a patient it has never seen."
         )
 
     model = get_subtype_model(SUBTYPE_CHECKPOINT_PATH)
     with torch.no_grad():
         probs = torch.softmax(model(tensor), dim=1)[0]
     idx = int(probs.argmax().item())
-    name = SUBTYPE_NAMES[idx]
-    return name, SUBTYPE_DISPLAY_NAMES[name], float(probs[idx].item())
+    name = names[idx]
+    return name, SUBTYPE_SCHEMES[scheme]["display"][name], float(probs[idx].item())
 
 
 @app.post("/predict", response_model=PredictionResponse)

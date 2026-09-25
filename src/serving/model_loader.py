@@ -4,7 +4,7 @@ from functools import lru_cache
 
 import torch
 
-from src.data.dataset import SUBTYPE_NAMES
+from src.data.dataset import DEFAULT_SUBTYPE_SCHEME, SUBTYPE_SCHEMES
 from src.models.classifier import BreakHisClassifier, MalignantSubtypeClassifier
 from src.training.checkpoint import load_checkpoint
 
@@ -19,7 +19,9 @@ def get_model(checkpoint_path: str, device: str = "cpu") -> BreakHisClassifier:
 
 @lru_cache(maxsize=4)
 def get_subtype_model(checkpoint_path: str, device: str = "cpu") -> MalignantSubtypeClassifier:
-    model = MalignantSubtypeClassifier(num_classes=len(SUBTYPE_NAMES), pretrained=False).to(device)
+    scheme = subtype_checkpoint_scheme(checkpoint_path)
+    num_classes = len(SUBTYPE_SCHEMES[scheme]["names"])
+    model = MalignantSubtypeClassifier(num_classes=num_classes, pretrained=False).to(device)
     load_checkpoint(checkpoint_path, model)
     model.eval()
     return model
@@ -41,3 +43,19 @@ def subtype_checkpoint_macro_f1(checkpoint_path: str) -> float:
     metrics = checkpoint.get("metrics") or {}
     value = metrics.get("macro_f1")
     return float(value) if value is not None else -1.0
+
+
+@lru_cache(maxsize=4)
+def subtype_checkpoint_scheme(checkpoint_path: str) -> str:
+    """The label scheme a subtype checkpoint was trained with.
+
+    Checkpoints written before schemes existed carry none; those are all
+    4-way models, so that is the fallback. An unrecognised scheme is an
+    error rather than a guess, since building the wrong-sized head would
+    fail to load at best and mislabel classes at worst.
+    """
+    checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
+    scheme = (checkpoint.get("metrics") or {}).get("label_scheme", DEFAULT_SUBTYPE_SCHEME)
+    if scheme not in SUBTYPE_SCHEMES:
+        raise ValueError(f"checkpoint {checkpoint_path} has unknown label scheme {scheme!r}")
+    return scheme

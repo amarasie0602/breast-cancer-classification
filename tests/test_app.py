@@ -307,3 +307,60 @@ def test_predict_rejects_unknown_magnification_before_touching_the_filesystem():
         data={"magnification": "../../secrets"},
     )
     assert resp.status_code == 400
+
+
+def _make_forced_ductal_checkpoint(tmp_path, forced_index: int, macro_f1: float):
+    model = MalignantSubtypeClassifier(num_classes=2, pretrained=False)
+    with torch.no_grad():
+        head = model.backbone.classifier[-1]
+        head.weight.zero_()
+        head.bias.zero_()
+        head.bias[forced_index] = 50.0
+    path = tmp_path / f"ductal_{forced_index}_{macro_f1}.pt"
+    save_checkpoint(
+        path,
+        model,
+        optim.Adam(model.parameters()),
+        epoch=0,
+        metrics={"macro_f1": macro_f1, "label_scheme": "ductal_vs_other"},
+    )
+    return path
+
+
+def test_predict_reports_ductal_vs_other_from_a_two_class_checkpoint(monkeypatch, tmp_path):
+    binary = _make_forced_binary_checkpoint(tmp_path, force_malignant=True)
+    ductal = _make_forced_ductal_checkpoint(tmp_path, forced_index=1, macro_f1=0.80)
+    get_model.cache_clear()
+    get_subtype_model.cache_clear()
+    monkeypatch.setattr("src.serving.app.CHECKPOINT_PATH", str(binary))
+    monkeypatch.setattr("src.serving.app.SUBTYPE_CHECKPOINT_PATH", str(ductal))
+
+    body = client.post(
+        "/predict",
+        files={"file": ("sample.png", _fake_histology_bytes(), "image/png")},
+        data={"magnification": "40"},
+    ).json()
+
+    assert body["subtype"] == "other_malignant"
+    assert body["subtype_display_name"].startswith("Non-ductal carcinoma")
+
+
+def test_two_class_checkpoint_is_held_to_a_two_class_bar(monkeypatch, tmp_path):
+    # 0.62 clears the 4-class bar of 0.55 but is barely above the ~0.50 a
+    # coin scores on 2 classes, so it must be refused.
+    binary = _make_forced_binary_checkpoint(tmp_path, force_malignant=True)
+    ductal = _make_forced_ductal_checkpoint(tmp_path, forced_index=0, macro_f1=0.62)
+    get_model.cache_clear()
+    get_subtype_model.cache_clear()
+    monkeypatch.setattr("src.serving.app.CHECKPOINT_PATH", str(binary))
+    monkeypatch.setattr("src.serving.app.SUBTYPE_CHECKPOINT_PATH", str(ductal))
+
+    body = client.post(
+        "/predict",
+        files={"file": ("sample.png", _fake_histology_bytes(), "image/png")},
+        data={"magnification": "40"},
+    ).json()
+
+    assert body["subtype"] is None
+    assert "0.70" in body["subtype_unavailable_reason"]
+    assert "0.50" in body["subtype_unavailable_reason"]

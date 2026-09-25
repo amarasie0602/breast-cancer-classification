@@ -15,10 +15,11 @@ import argparse
 import torch
 from torch.utils.data import DataLoader
 
-from src.data.dataset import SUBTYPE_NAMES, BreakHisDataset, BreakHisSubtypeDataset
+from src.data.dataset import SUBTYPE_SCHEMES, BreakHisDataset, BreakHisSubtypeDataset
 from src.data.splits import filter_samples_by_patients, stratified_patient_split
 from src.data.transforms import eval_transform
 from src.models.classifier import BreakHisClassifier, MalignantSubtypeClassifier
+from src.serving.model_loader import subtype_checkpoint_scheme
 from src.training.checkpoint import load_checkpoint
 from src.training.loop import evaluate as evaluate_binary
 from src.training.subtype_loop import evaluate as evaluate_subtype
@@ -67,17 +68,22 @@ def evaluate_binary_checkpoint(checkpoint_path, data_root, magnification, ratios
 
 
 def evaluate_subtype_checkpoint(checkpoint_path, data_root, ratios, seed, batch_size):
-    full_ds = BreakHisSubtypeDataset(data_root)
+    # The checkpoint records which labelling it was trained on; evaluating a
+    # 2-class model against 4-class labels (or vice versa) would be meaningless.
+    scheme = subtype_checkpoint_scheme(str(checkpoint_path))
+    class_names = SUBTYPE_SCHEMES[scheme]["names"]
+
+    full_ds = BreakHisSubtypeDataset(data_root, scheme=scheme)
     _, _, test_patients = stratified_patient_split(
         full_ds.samples, ratios=ratios, seed=seed, min_per_split=1
     )
 
-    test_ds = BreakHisSubtypeDataset(data_root, transform=eval_transform())
+    test_ds = BreakHisSubtypeDataset(data_root, transform=eval_transform(), scheme=scheme)
     test_ds.samples = filter_samples_by_patients(test_ds.samples, test_patients)
     if not test_ds.samples:
         raise SystemExit("No test samples for the subtype task")
 
-    model = MalignantSubtypeClassifier(num_classes=len(SUBTYPE_NAMES), pretrained=False)
+    model = MalignantSubtypeClassifier(num_classes=len(class_names), pretrained=False)
     load_checkpoint(checkpoint_path, model)
     model.eval()
 
@@ -86,15 +92,15 @@ def evaluate_subtype_checkpoint(checkpoint_path, data_root, ratios, seed, batch_
         DataLoader(test_ds, batch_size=batch_size),
         torch.nn.CrossEntropyLoss(),
         "cpu",
-        num_classes=len(SUBTYPE_NAMES),
+        num_classes=len(class_names),
     )
 
-    print("\n=== Malignant subtype (4-class) ===")
+    print(f"\n=== Malignant subtype ({scheme}, {len(class_names)} classes) ===")
     print(f"  test images   : {len(test_ds.samples)}")
     print(f"  accuracy      : {metrics['accuracy']:.4f}")
     print(f"  macro F1      : {metrics['macro_f1']:.4f}")
     print("\n  Per class (precision / recall / F1):")
-    for i, name in enumerate(SUBTYPE_NAMES):
+    for i, name in enumerate(class_names):
         n_images = sum(1 for s in test_ds.samples if s["label"] == i)
         patients = {s["path"].parent.parent.name for s in test_ds.samples if s["label"] == i}
         print(
@@ -102,7 +108,7 @@ def evaluate_subtype_checkpoint(checkpoint_path, data_root, ratios, seed, batch_
             f"{metrics['per_class_recall'][i]:.4f} / {metrics['per_class_f1'][i]:.4f}"
             f"   ({n_images} images, {len(patients)} patients)"
         )
-    _print_confusion_matrix(metrics["confusion_matrix"], SUBTYPE_NAMES)
+    _print_confusion_matrix(metrics["confusion_matrix"], class_names)
     print(
         "\n  NOTE: with only 1-2 test patients for three of these classes,\n"
         "  these per-class numbers are indicative, not validated. See\n"
