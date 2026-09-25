@@ -109,10 +109,18 @@ def evaluate_subtype_checkpoint(checkpoint_path, data_root, ratios, seed, batch_
             f"   ({n_images} images, {len(patients)} patients)"
         )
     _print_confusion_matrix(metrics["confusion_matrix"], class_names)
+
+    # Accuracy alone flatters a model on a skewed test set, so print what
+    # always predicting the most common class would score.
+    counts = [sum(1 for s in test_ds.samples if s["label"] == i) for i in range(len(class_names))]
+    majority = max(range(len(class_names)), key=lambda i: counts[i])
     print(
-        "\n  NOTE: with only 1-2 test patients for three of these classes,\n"
-        "  these per-class numbers are indicative, not validated. See\n"
-        "  docs/model_card.md."
+        f"\n  Baseline: always predicting '{class_names[majority]}' scores "
+        f"{counts[majority] / len(test_ds.samples):.4f} accuracy on this test set."
+    )
+    print(
+        f"  NOTE: the test split holds only {len(test_patients)} patients in total, so\n"
+        "  these numbers are indicative, not validated. See docs/model_card.md."
     )
     return metrics
 

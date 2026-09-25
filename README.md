@@ -34,9 +34,13 @@ benign/malignant result plus a `subtype_unavailable_reason` explaining
 why, rather than presenting a coin toss as a prediction. The measured
 numbers are in [docs/model_card.md](docs/model_card.md#limitations).
 
-A learnable version of this stage would be a coarser question with enough
-patients behind it — ductal (38 patients) vs all other malignant subtypes
-(20) — rather than the 4-way split.
+The coarser question — ductal (38 patients) vs all other malignant subtypes
+pooled (20) — was also trained. It beats chance but only narrowly: 0.549
+validation macro F1 against a 0.70 bar, and on the held-out test set it
+finds just 40% of non-ductal cancers. It isn't deployed either. The
+serving code supports both labellings (the checkpoint records which one
+it uses), so a better model can be dropped in, but with this few patients
+per subtype another training run isn't expected to get there.
 
 "Benign" means non-cancerous tumor, not healthy tissue — BreakHis contains
 no normal/healthy tissue images at all, only benign and malignant tumor

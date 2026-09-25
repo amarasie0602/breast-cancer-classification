@@ -164,10 +164,36 @@ has as few as 135 images at a single magnification).
   `subtype_unavailable_reason` instead of dressing up a coin toss as a
   finding.
 
-  The route to a working stage 3 on this dataset is a coarser question
-  with enough patients behind it — ductal carcinoma (38 patients) versus
-  all other malignant subtypes (20 patients) is a genuinely learnable and
-  validatable binary problem, unlike the 4-way split.
+- **The coarser ductal-vs-other question was also tried, and falls short
+  too.** Pooling lobular, mucinous and papillary carcinoma into one
+  "other malignant" class gives 38 vs 20 patients instead of 5-9 per class
+  (`configs/train_ductal_vs_other.yaml`). It is the first stage-3 model to
+  beat chance on validation, but only just:
+
+  | Epoch | Backbone | val macro F1 | val loss | train loss |
+  | --- | --- | --- | --- | --- |
+  | 0 | frozen | 0.456 | 0.759 | 0.651 |
+  | 1 | frozen | 0.454 | 0.769 | 0.605 |
+  | 2 | unfrozen | **0.549** | 0.774 | 0.533 |
+  | 3 | unfrozen | 0.546 | 0.816 | 0.440 |
+  | 4 | unfrozen | 0.516 | 0.886 | 0.385 |
+
+  The same overfitting signature as before: train loss keeps falling while
+  validation loss rises, and early stopping ended the run. On the held-out
+  test split (8 patients, 692 images) the best checkpoint reaches 0.662
+  accuracy and 0.622 macro F1 — against a 0.585 accuracy for simply always
+  answering "ductal", since ductal is 58.5% of the test images. It finds
+  84% of ductal cases but only **40% of non-ductal ones**, calling the rest
+  ductal.
+
+  Its validation macro F1 of 0.549 is well under the 0.70 bar serving sets
+  for a 2-class model (chance ≈ 0.50), so it is **not deployed**; stage 3
+  continues to report no subtype. The checkpoint is kept under
+  `checkpoints/experiments/ductal_vs_other/`.
+
+  With both the 4-way and the pooled 2-way question tried, the limit is the
+  number of patients, not the modelling choices. Another training run on
+  this data isn't expected to change that; more patients per subtype would.
 - **Input validation is a heuristic, not a trained classifier.** Stage 1
   (`src/serving/input_guard.py`) screens for H&E-characteristic color and
   texture; it catches ordinary photos, cartoons, and blank images but is
