@@ -1,3 +1,4 @@
+import pytest
 import base64
 import io
 
@@ -14,6 +15,16 @@ from src.serving.model_loader import get_model, get_subtype_model, subtype_check
 from src.training.checkpoint import save_checkpoint
 
 client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def _isolate_checkpoint_dir(monkeypatch, tmp_path):
+    """Serving routes to checkpoints/best_mag{N}.pt when one exists, and this
+    machine has real ones. Point routing at an empty directory so each test's
+    CHECKPOINT_PATH is what actually runs, unless a test opts in."""
+    empty = tmp_path / "no_mag_checkpoints"
+    empty.mkdir()
+    monkeypatch.setattr("src.serving.app.CHECKPOINT_DIR", empty)
 
 
 def _make_forced_binary_checkpoint(tmp_path, force_malignant: bool):
@@ -246,3 +257,53 @@ def test_predict_reports_subtype_when_checkpoint_clears_the_bar(monkeypatch, tmp
     body = resp.json()
     assert body["subtype"] == "lobular_carcinoma"
     assert body["subtype_unavailable_reason"] is None
+
+
+def test_predict_uses_the_model_matching_the_selected_magnification(monkeypatch, tmp_path):
+    # Default model says benign; the 200x model says malignant. Selecting
+    # 200x must run the 200x model.
+    default = _make_forced_binary_checkpoint(tmp_path, force_malignant=False)
+    mag_dir = tmp_path / "mags"
+    mag_dir.mkdir()
+    forced = _make_forced_binary_checkpoint(mag_dir, force_malignant=True)
+    forced.rename(mag_dir / "best_mag200.pt")
+    get_model.cache_clear()
+    monkeypatch.setattr("src.serving.app.CHECKPOINT_PATH", str(default))
+    monkeypatch.setattr("src.serving.app.CHECKPOINT_DIR", mag_dir)
+    monkeypatch.setattr("src.serving.app.SUBTYPE_CHECKPOINT_PATH", "nonexistent_subtype.pt")
+
+    resp = client.post(
+        "/predict",
+        files={"file": ("sample.png", _fake_histology_bytes(), "image/png")},
+        data={"magnification": "200"},
+    )
+
+    body = resp.json()
+    assert body["label"] == "malignant"
+    assert body["model_magnification"] == "200"
+
+
+def test_predict_falls_back_to_default_model_when_no_matching_checkpoint(monkeypatch, tmp_path):
+    default = _make_forced_binary_checkpoint(tmp_path, force_malignant=False)
+    get_model.cache_clear()
+    monkeypatch.setattr("src.serving.app.CHECKPOINT_PATH", str(default))
+    monkeypatch.setattr("src.serving.app.SUBTYPE_CHECKPOINT_PATH", "nonexistent_subtype.pt")
+
+    resp = client.post(
+        "/predict",
+        files={"file": ("sample.png", _fake_histology_bytes(), "image/png")},
+        data={"magnification": "400"},
+    )
+
+    body = resp.json()
+    assert body["label"] == "benign"
+    assert body["model_magnification"] is None
+
+
+def test_predict_rejects_unknown_magnification_before_touching_the_filesystem():
+    resp = client.post(
+        "/predict",
+        files={"file": ("sample.png", _fake_histology_bytes(), "image/png")},
+        data={"magnification": "../../secrets"},
+    )
+    assert resp.status_code == 400

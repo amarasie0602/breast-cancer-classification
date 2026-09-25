@@ -476,6 +476,7 @@
 
           <div class="kv">
             <span><span class="k">Magnification</span> <span class="v" id="kv-mag"></span></span>
+            <span><span class="k">Model</span> <span class="v" id="kv-model"></span></span>
             <span><span class="k">Threshold</span> <span class="v">0.50</span></span>
             <span><span class="k">Specimen</span> <span class="v" id="kv-file"></span></span>
           </div>
@@ -626,6 +627,9 @@
     document.getElementById("val-malignant").textContent = (malignantP * 100).toFixed(1) + "%";
 
     document.getElementById("kv-mag").textContent = data.magnification + "×";
+    document.getElementById("kv-model").textContent = data.model_magnification
+      ? data.model_magnification + "× model"
+      : "default model (no " + data.magnification + "× model deployed)";
     document.getElementById("kv-file").textContent = selectedFile ? selectedFile.name : "—";
 
     resultOverlay.src = "data:image/png;base64," + data.gradcam_overlay_base64;

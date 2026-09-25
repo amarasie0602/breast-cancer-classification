@@ -25,6 +25,16 @@ app = FastAPI(title="Breast Cancer Histopathology Classifier")
 app.add_middleware(RequestLoggingMiddleware)
 
 CHECKPOINT_PATH = os.environ.get("CHECKPOINT_PATH", "checkpoints/best_mag40.pt")
+
+# One binary model is trained per magnification, and they are not
+# interchangeable: on the held-out test set the 40x model's specificity is
+# 0.544 while the 200x model's is 0.732. Serving always used the 40x model no
+# matter what magnification the user selected, so /predict now picks
+# best_mag{magnification}.pt from this directory when it exists and falls back
+# to CHECKPOINT_PATH when it doesn't (e.g. a container that only ships the
+# 40x checkpoint).
+CHECKPOINT_DIR = Path(os.environ.get("CHECKPOINT_DIR", "checkpoints"))
+ALLOWED_MAGNIFICATIONS = ("40", "100", "200", "400")
 SUBTYPE_CHECKPOINT_PATH = os.environ.get("SUBTYPE_CHECKPOINT_PATH", "checkpoints/best_subtype.pt")
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -62,6 +72,18 @@ def metrics() -> Dict[str, Dict[str, int]]:
     return {"prediction_distribution": get_prediction_distribution()}
 
 
+def _binary_checkpoint_for(magnification: str):
+    """Return (checkpoint path, magnification of the model actually used).
+
+    ``magnification`` has already been validated against
+    ALLOWED_MAGNIFICATIONS, so it can't be used to reach an arbitrary path.
+    """
+    matched = CHECKPOINT_DIR / f"best_mag{magnification}.pt"
+    if matched.is_file():
+        return str(matched), magnification
+    return CHECKPOINT_PATH, None
+
+
 def _classify_subtype(tensor):
     """Stage 3. Returns (subtype, display_name, confidence) when a good
     enough model is available, a string explaining why not when there is a
@@ -93,13 +115,20 @@ def _classify_subtype(tensor):
 async def predict(
     file: UploadFile = File(...), magnification: str = Form("40")
 ) -> PredictionResponse:
+    if magnification not in ALLOWED_MAGNIFICATIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"magnification must be one of {', '.join(ALLOWED_MAGNIFICATIONS)}",
+        )
+
     image_bytes = await file.read()
     try:
         image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     except UnidentifiedImageError as e:
         raise HTTPException(status_code=400, detail="File is not a valid image") from e
 
-    if not os.path.exists(CHECKPOINT_PATH):
+    checkpoint_path, model_magnification = _binary_checkpoint_for(magnification)
+    if not os.path.exists(checkpoint_path):
         raise HTTPException(status_code=503, detail="Model checkpoint not available")
 
     if not looks_like_histology(image):
@@ -108,7 +137,7 @@ async def predict(
             detail="Invalid Image — Please upload a valid breast histology image.",
         )
 
-    model = get_model(CHECKPOINT_PATH)
+    model = get_model(checkpoint_path)
     tensor = eval_transform()(image).unsqueeze(0)
 
     with torch.no_grad():
@@ -139,6 +168,7 @@ async def predict(
         label=label,
         probability=probability,
         magnification=magnification,
+        model_magnification=model_magnification,
         gradcam_overlay_base64=overlay_base64,
         subtype=subtype,
         subtype_display_name=subtype_display_name,
