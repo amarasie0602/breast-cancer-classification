@@ -16,13 +16,25 @@ from src.training.checkpoint import load_checkpoint
 from src.training.loop import evaluate
 
 MIN_F1 = 0.75
+# A real checkpoint is ~280MB; a Git LFS pointer file (checked out without
+# `lfs: true`, as most CI jobs do to avoid the bandwidth cost) is a few
+# hundred bytes of text. This distinguishes "no checkpoint" from "a pointer
+# stands in for one," since os.path.exists() alone can't tell them apart.
+_MIN_REAL_CHECKPOINT_BYTES = 1_000_000
 
 CHECKPOINT_PATH = os.environ.get("VALIDATION_CHECKPOINT_PATH", "checkpoints/best_mag40.pt")
 VAL_DATA_ROOT = os.environ.get("VALIDATION_DATA_ROOT", "data/BreaKHis_v1")
 
 
+def _checkpoint_available() -> bool:
+    return (
+        os.path.exists(CHECKPOINT_PATH)
+        and os.path.getsize(CHECKPOINT_PATH) >= _MIN_REAL_CHECKPOINT_BYTES
+    )
+
+
 @pytest.mark.skipif(
-    not os.path.exists(CHECKPOINT_PATH), reason="No trained checkpoint available to validate"
+    not _checkpoint_available(), reason="No trained checkpoint available to validate"
 )
 def test_checkpoint_meets_minimum_f1_threshold():
     model = BreakHisClassifier(pretrained=False)

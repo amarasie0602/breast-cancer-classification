@@ -12,6 +12,7 @@ COPY --from=builder /install /usr/local
 
 COPY src/ src/
 COPY configs/ configs/
+COPY checkpoints/best_mag40.pt checkpoints/best_mag40.pt
 
 RUN useradd --create-home --uid 1000 appuser
 USER appuser

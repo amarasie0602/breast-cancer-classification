@@ -6,7 +6,7 @@ from typing import Tuple, Union
 
 import yaml
 from torch import nn, optim
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, WeightedRandomSampler
 
 from src.data.dataset import BreakHisDataset
 from src.data.splits import filter_samples_by_patients, stratified_patient_split
@@ -31,6 +31,7 @@ def build_dataloaders(
     split_ratios: Tuple[float, float, float],
     seed: int,
     batch_size: int,
+    balance_classes: bool = False,
 ) -> Tuple[DataLoader, DataLoader]:
     full_ds = BreakHisDataset(data_root, magnification=magnification)
     train_patients, val_patients, _ = stratified_patient_split(
@@ -43,10 +44,30 @@ def build_dataloaders(
     val_ds = BreakHisDataset(data_root, magnification=magnification, transform=eval_transform())
     val_ds.samples = filter_samples_by_patients(val_ds.samples, val_patients)
 
-    return (
-        DataLoader(train_ds, batch_size=batch_size, shuffle=True),
-        DataLoader(val_ds, batch_size=batch_size),
-    )
+    if balance_classes:
+        # BreakHis is ~2.2:1 malignant to benign, and training on that
+        # distribution unweighted is why the model over-calls cancer:
+        # sensitivity 0.88-0.99 but specificity 0.46-0.73 on test (see
+        # docs/model_card.md). Sampling the two classes equally removes the
+        # prior that makes "malignant" the cheap guess.
+        counts = {0: 0, 1: 0}
+        for s in train_ds.samples:
+            counts[s["label"]] += 1
+        per_class_weight = {
+            label: (len(train_ds.samples) / (2 * n) if n else 0.0) for label, n in counts.items()
+        }
+        sample_weights = [per_class_weight[s["label"]] for s in train_ds.samples]
+        train_loader = DataLoader(
+            train_ds,
+            batch_size=batch_size,
+            sampler=WeightedRandomSampler(
+                sample_weights, num_samples=len(train_ds.samples), replacement=True
+            ),
+        )
+    else:
+        train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
+
+    return train_loader, DataLoader(val_ds, batch_size=batch_size)
 
 
 def run_training(
@@ -61,7 +82,12 @@ def run_training(
     import mlflow
 
     train_loader, val_loader = build_dataloaders(
-        data_root, magnification, split_ratios, seed, config["batch_size"]
+        data_root,
+        magnification,
+        split_ratios,
+        seed,
+        config["batch_size"],
+        balance_classes=config.get("balance_classes", False),
     )
 
     model = BreakHisClassifier(pretrained=pretrained).to(device)
@@ -102,6 +128,8 @@ def run_training(
 
             mlflow.log_metric("train_loss", train_loss, step=epoch)
             for key, value in val_metrics.items():
+                if key == "confusion_matrix":  # not a scalar; skip MLflow metric logging
+                    continue
                 mlflow.log_metric(f"val_{key}", value, step=epoch)
 
             if val_metrics["f1"] > best_f1:

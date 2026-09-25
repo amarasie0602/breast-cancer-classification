@@ -1,0 +1,22 @@
+# Tuned against an observed failure mode: with ResNet50, learning_rate 1e-4
+# and the backbone unfrozen after a single epoch, train loss dropped
+# 1.35 -> 0.86 while val loss ROSE 1.39 -> 1.86 -- textbook overfitting,
+# unsurprising when 3 of the 4 subtypes have only 4-6 training patients.
+#
+# The response was to attack the overfitting from several directions at once
+# (see src/models/classifier.py and src/data/transforms.py): a 5.3M-param
+# EfficientNet-B0 backbone instead of 25.6M-param ResNet50, much heavier
+# augmentation, and class-balanced sampling. EfficientNet-B0 is also ~4x
+# cheaper per epoch on CPU, which is what makes 25 epochs affordable here.
+epochs: 25
+batch_size: 32
+learning_rate: 5.0e-4
+weight_decay: 1.0e-4
+lr_scheduler:
+  patience: 3
+  factor: 0.5
+early_stopping:
+  patience: 6
+  min_delta: 0.001
+freeze_backbone_epochs: 3
+checkpoint_dir: checkpoints

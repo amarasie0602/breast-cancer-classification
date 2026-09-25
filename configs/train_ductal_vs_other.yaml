@@ -1,0 +1,26 @@
+# Stage 3, reframed as a question the data can support: ductal carcinoma
+# (38 patients) versus every other malignant subtype pooled (20 patients).
+# The 4-way version never beat chance because three of its classes had only
+# 4-6 training patients each; see docs/model_card.md.
+#
+# Same backbone, augmentation and balanced sampling as train_subtype.yaml.
+# Fewer epochs than that config's 25: with two classes and ~4x the patients
+# per class, early stopping is expected to fire well before then, and each
+# EfficientNet-B0 epoch costs ~15 minutes on this CPU.
+label_scheme: ductal_vs_other
+epochs: 12
+batch_size: 32
+learning_rate: 5.0e-4
+weight_decay: 1.0e-4
+lr_scheduler:
+  patience: 2
+  factor: 0.5
+early_stopping:
+  patience: 4
+  min_delta: 0.001
+freeze_backbone_epochs: 2
+# Not checkpoints/: an experiment writing to the served path is what destroyed
+# the good 200x model once. Promote this checkpoint only after it has been
+# evaluated on the held-out test split.
+checkpoint_dir: checkpoints/experiments/ductal_vs_other
+checkpoint_name: best_subtype.pt

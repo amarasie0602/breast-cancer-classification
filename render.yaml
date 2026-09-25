@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: breast-cancer-classifier
+    runtime: image
+    image:
+      url: ghcr.io/amarasie0602/breast-cancer-classifier:latest
+    plan: free
+    region: oregon
+    healthCheckPath: /health
+    envVars:
+      - key: CHECKPOINT_PATH
+        value: checkpoints/best_mag40.pt

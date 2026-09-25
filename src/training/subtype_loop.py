@@ -1,4 +1,8 @@
-"""Training and evaluation loops."""
+"""Training and evaluation loops for the malignant-subtype (multi-class)
+classifier -- separate from src/training/loop.py because the binary
+classifier's single-logit BCEWithLogitsLoss shape (float labels, unsqueeze)
+is fundamentally different from CrossEntropyLoss's multi-class shape
+(integer labels, argmax over class logits)."""
 
 from typing import Dict
 
@@ -6,13 +10,7 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader
 
-from src.training.metrics import (
-    accuracy,
-    confusion_matrix,
-    logits_to_preds,
-    precision_recall_f1,
-    sensitivity_specificity,
-)
+from src.training.metrics import accuracy, confusion_matrix, multiclass_precision_recall_f1
 
 
 def train_one_epoch(
@@ -25,7 +23,7 @@ def train_one_epoch(
     total_loss = 0.0
     for images, labels in dataloader:
         images = images.to(device)
-        labels = labels.to(device).float().unsqueeze(1)
+        labels = labels.to(device)
 
         optimizer.zero_grad()
         logits = model(images)
@@ -39,7 +37,9 @@ def train_one_epoch(
 
 
 @torch.no_grad()
-def evaluate(model: nn.Module, dataloader: DataLoader, criterion: nn.Module, device: str) -> Dict[str, float]:
+def evaluate(
+    model: nn.Module, dataloader: DataLoader, criterion: nn.Module, device: str, num_classes: int
+) -> Dict[str, object]:
     if len(dataloader.dataset) == 0:
         raise ValueError("evaluate received an empty dataset")
 
@@ -50,28 +50,25 @@ def evaluate(model: nn.Module, dataloader: DataLoader, criterion: nn.Module, dev
 
     for images, labels in dataloader:
         images = images.to(device)
-        labels_float = labels.to(device).float().unsqueeze(1)
+        labels = labels.to(device)
 
         logits = model(images)
-        loss = criterion(logits, labels_float)
+        loss = criterion(logits, labels)
         total_loss += loss.item() * images.size(0)
 
-        all_preds.append(logits_to_preds(logits).squeeze(1))
-        all_labels.append(labels.to(device))
+        all_preds.append(logits.argmax(dim=1))
+        all_labels.append(labels)
 
     preds = torch.cat(all_preds)
     labels = torch.cat(all_labels)
-    precision, recall, f1 = precision_recall_f1(preds, labels)
-    sensitivity, specificity = sensitivity_specificity(preds, labels)
-    cm = confusion_matrix(preds, labels, num_classes=2)
+    precisions, recalls, f1s, macro_f1 = multiclass_precision_recall_f1(preds, labels, num_classes)
 
     return {
         "loss": total_loss / len(dataloader.dataset),
         "accuracy": accuracy(preds, labels),
-        "precision": precision,
-        "recall": recall,
-        "f1": f1,
-        "sensitivity": sensitivity,
-        "specificity": specificity,
-        "confusion_matrix": cm,
+        "macro_f1": macro_f1,
+        "per_class_precision": precisions,
+        "per_class_recall": recalls,
+        "per_class_f1": f1s,
+        "confusion_matrix": confusion_matrix(preds, labels, num_classes),
     }

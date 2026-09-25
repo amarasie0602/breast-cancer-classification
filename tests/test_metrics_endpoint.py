@@ -1,3 +1,4 @@
+import pytest
 from fastapi.testclient import TestClient
 from torch import optim
 
@@ -5,9 +6,19 @@ from src.models.classifier import BreakHisClassifier
 from src.serving.app import app
 from src.serving.model_loader import get_model
 from src.training.checkpoint import save_checkpoint
-from tests.test_app import _fake_image_bytes
+from tests.test_app import _fake_histology_bytes
 
 client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def _isolate_checkpoint_dir(monkeypatch, tmp_path):
+    """Serving routes to checkpoints/best_mag{N}.pt when one exists, and this
+    machine has real ones. Point routing at an empty directory so each test's
+    CHECKPOINT_PATH is what actually runs, unless a test opts in."""
+    empty = tmp_path / "no_mag_checkpoints"
+    empty.mkdir()
+    monkeypatch.setattr("src.serving.app.CHECKPOINT_DIR", empty)
 
 
 def test_health_response_has_latency_header():
@@ -29,7 +40,7 @@ def test_metrics_reflects_recorded_predictions(monkeypatch, tmp_path):
 
     client.post(
         "/predict",
-        files={"file": ("sample.png", _fake_image_bytes(), "image/png")},
+        files={"file": ("sample.png", _fake_histology_bytes(), "image/png")},
         data={"magnification": "40"},
     )
 

@@ -1,0 +1,705 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Breast Cancer Histopathology Classifier</title>
+<style>
+  :root {
+    --bg: #eef2f6;
+    --panel: #ffffff;
+    --panel-alt: #f7fafc;
+    --border: #d6dee7;
+    --border-strong: #b8c6d4;
+    --text: #12212f;
+    --muted: #5c7084;
+    --clinical: #0b6a8f;
+    --clinical-dark: #075472;
+    --clinical-soft: #e3f0f7;
+    --benign: #0f7a5a;
+    --benign-soft: #e2f4ee;
+    --malignant: #b3372c;
+    --malignant-soft: #fdecea;
+    --warn: #8a5a00;
+    --warn-soft: #fdf3e0;
+    --warn-border: #edd7a6;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0e151c; --panel: #151f29; --panel-alt: #1a2631;
+      --border: #27353f; --border-strong: #35485a;
+      --text: #e6edf3; --muted: #9ab0c2;
+      --clinical: #4cadd8; --clinical-dark: #7cc6e6; --clinical-soft: #102c3b;
+      --benign: #47c79c; --benign-soft: #10302a;
+      --malignant: #f0806f; --malignant-soft: #351d1c;
+      --warn: #e5b45c; --warn-soft: #2e2313; --warn-border: #4d3d1d;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0e151c; --panel: #151f29; --panel-alt: #1a2631;
+    --border: #27353f; --border-strong: #35485a;
+    --text: #e6edf3; --muted: #9ab0c2;
+    --clinical: #4cadd8; --clinical-dark: #7cc6e6; --clinical-soft: #102c3b;
+    --benign: #47c79c; --benign-soft: #10302a;
+    --malignant: #f0806f; --malignant-soft: #351d1c;
+    --warn: #e5b45c; --warn-soft: #2e2313; --warn-border: #4d3d1d;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ---------- Masthead (kept short so results fit above the fold) ---------- */
+  .masthead {
+    background: var(--panel);
+    border-bottom: 3px solid var(--clinical);
+    padding: 8px 16px;
+  }
+  .masthead-inner {
+    max-width: 1180px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .mark {
+    width: 32px; height: 32px; flex: 0 0 32px;
+    border-radius: 7px;
+    background: var(--clinical-soft);
+    color: var(--clinical);
+    display: grid; place-items: center;
+  }
+  .titles h1 { font-size: 1rem; margin: 0; }
+  .titles p { margin: 0; font-size: 0.72rem; color: var(--muted); }
+  .ruo-badge {
+    margin-left: auto;
+    font-size: 0.64rem; font-weight: 700;
+    letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--warn); background: var(--warn-soft);
+    border: 1px solid var(--warn-border);
+    padding: 4px 9px; border-radius: 999px; white-space: nowrap;
+  }
+
+  main { max-width: 1180px; margin: 0 auto; padding: 10px 16px 32px; }
+
+  .notice {
+    background: var(--warn-soft);
+    border: 1px solid var(--warn-border);
+    border-left: 4px solid var(--warn);
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 0.76rem;
+    margin-bottom: 10px;
+  }
+  .notice strong { color: var(--warn); }
+  .notice details { display: inline; }
+  .notice summary { display: inline; cursor: pointer; color: var(--clinical); margin-left: 4px; }
+  .notice details p { margin: 6px 0 2px; color: var(--muted); }
+
+  /* ---------- Two-column workspace: input | results ---------- */
+  .workspace {
+    display: grid;
+    grid-template-columns: minmax(280px, 360px) 1fr;
+    gap: 12px;
+    align-items: start;
+  }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .card-head {
+    background: var(--panel-alt);
+    border-bottom: 1px solid var(--border);
+    padding: 7px 14px;
+    font-size: 0.68rem; font-weight: 700;
+    letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--muted);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .card-head .aside { margin-left: auto; text-transform: none; letter-spacing: 0; font-weight: 500; }
+  .card-body { padding: 12px 14px; }
+
+  label.field {
+    display: block;
+    font-size: 0.68rem; font-weight: 700;
+    color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.06em;
+    margin-bottom: 5px;
+  }
+
+  .dropzone {
+    border: 2px dashed var(--border-strong);
+    border-radius: 8px;
+    background: var(--panel-alt);
+    text-align: center;
+    cursor: pointer;
+    padding: 14px 10px;
+    min-height: 190px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    transition: border-color .15s, background .15s;
+  }
+  .dropzone:hover, .dropzone.dragover { border-color: var(--clinical); background: var(--clinical-soft); }
+  .dropzone:focus-visible { outline: 3px solid var(--clinical); outline-offset: 2px; }
+  .dropzone svg { color: var(--clinical); margin-bottom: 4px; }
+  .dropzone .dz-main { font-weight: 600; font-size: 0.86rem; word-break: break-all; }
+  .dropzone .dz-sub { color: var(--muted); font-size: 0.72rem; margin-top: 2px; }
+  .dropzone input { display: none; }
+  #preview {
+    display: none;
+    max-width: 100%;
+    max-height: 150px;
+    border-radius: 5px;
+    border: 1px solid var(--border);
+    margin-bottom: 6px;
+  }
+  .dropzone.has-image svg, .dropzone.has-image .dz-sub { display: none; }
+  .dropzone.has-image .dz-main { font-size: 0.74rem; font-weight: 500; color: var(--muted); }
+
+  select {
+    width: 100%;
+    padding: 7px 9px;
+    font: inherit; font-size: 0.85rem;
+    border-radius: 6px;
+    border: 1px solid var(--border-strong);
+    background: var(--panel); color: var(--text);
+  }
+  .mag { margin-top: 10px; }
+
+  button.analyze {
+    width: 100%;
+    margin-top: 10px;
+    padding: 11px;
+    font: inherit; font-size: 0.9rem; font-weight: 700;
+    border: none; border-radius: 7px;
+    background: var(--clinical); color: #fff;
+    cursor: pointer;
+  }
+  button.analyze:hover:not(:disabled) { background: var(--clinical-dark); }
+  button.analyze:disabled { opacity: .45; cursor: not-allowed; }
+
+  #status { min-height: 1.2em; font-size: 0.8rem; color: var(--muted); margin-top: 8px; }
+  #status.error {
+    color: var(--malignant); background: var(--malignant-soft);
+    border: 1px solid var(--malignant); border-radius: 6px;
+    padding: 8px 10px; font-weight: 600;
+  }
+  .spinner {
+    display: inline-block; width: 12px; height: 12px; margin-right: 7px;
+    border: 2px solid var(--border-strong); border-top-color: var(--clinical);
+    border-radius: 50%; animation: spin .7s linear infinite; vertical-align: -1px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ---------- Pipeline strip (inside the results panel) ---------- */
+  .pipeline { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 12px; }
+  .stage {
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 6px 9px;
+    background: var(--panel-alt);
+    font-size: 0.72rem;
+  }
+  .stage .num { font-family: var(--mono); font-size: 0.62rem; color: var(--muted); }
+  .stage .nm { display: block; font-weight: 600; }
+  .stage .st { color: var(--muted); }
+  .stage[data-state="ok"] { border-color: var(--benign); background: var(--benign-soft); }
+  .stage[data-state="ok"] .st { color: var(--benign); font-weight: 600; }
+  .stage[data-state="fail"] { border-color: var(--malignant); background: var(--malignant-soft); }
+  .stage[data-state="fail"] .st { color: var(--malignant); font-weight: 600; }
+  .stage[data-state="skip"] { border-color: var(--warn-border); background: var(--warn-soft); }
+  .stage[data-state="skip"] .st { color: var(--warn); font-weight: 600; }
+  .stage[data-state="busy"] { border-color: var(--clinical); background: var(--clinical-soft); }
+  .stage[data-state="busy"] .st { color: var(--clinical); font-weight: 600; }
+
+  /* ---------- Results ---------- */
+  .placeholder {
+    border: 1px dashed var(--border-strong);
+    border-radius: 8px;
+    padding: 38px 16px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.84rem;
+  }
+  #report { display: none; }
+
+  .finding {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+  .finding.benign { background: var(--benign-soft); border-color: var(--benign); }
+  .finding.malignant { background: var(--malignant-soft); border-color: var(--malignant); }
+  .finding .dot { width: 11px; height: 11px; border-radius: 50%; flex: 0 0 11px; }
+  .finding.benign .dot { background: var(--benign); }
+  .finding.malignant .dot { background: var(--malignant); }
+  .finding .txt { flex: 1 1 auto; min-width: 0; }
+  .finding .lbl { display: block; font-size: 1.22rem; font-weight: 700; line-height: 1.2; }
+  .finding.benign .lbl, .finding.benign .pct { color: var(--benign); }
+  .finding.malignant .lbl, .finding.malignant .pct { color: var(--malignant); }
+  .finding .sub { display: block; font-size: 0.74rem; color: var(--muted); }
+  .finding .pct { font-family: var(--mono); font-size: 1.4rem; font-weight: 700; }
+
+  .probs { margin-top: 10px; }
+  .prob-row {
+    display: grid;
+    grid-template-columns: 78px 1fr 56px;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 5px;
+    font-size: 0.78rem;
+  }
+  .prob-row .nm { color: var(--muted); font-weight: 600; }
+  .prob-row .val { font-family: var(--mono); text-align: right; }
+  .track { height: 8px; border-radius: 5px; background: var(--border); overflow: hidden; }
+  .fill { display: block; height: 100%; border-radius: 5px; }
+  .fill.benign { background: var(--benign); }
+  .fill.malignant { background: var(--malignant); }
+
+  .subtype-block {
+    display: none;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+  }
+  .subtype-block .k {
+    font-size: 0.66rem; font-weight: 700; letter-spacing: 0.07em;
+    text-transform: uppercase; color: var(--muted);
+  }
+  .subtype-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-top: 2px; }
+  .subtype-label { font-size: 0.98rem; font-weight: 700; }
+  .subtype-confidence { font-family: var(--mono); font-size: 0.82rem; color: var(--muted); }
+  .subtype-caveat {
+    margin-top: 6px;
+    background: var(--warn-soft);
+    border-left: 3px solid var(--warn);
+    border-radius: 5px;
+    padding: 6px 9px;
+    font-size: 0.72rem;
+    color: var(--muted);
+  }
+  .subtype-caveat strong { color: var(--warn); }
+  .unavailable {
+    margin-top: 4px;
+    font-size: 0.76rem;
+    color: var(--muted);
+    background: var(--panel-alt);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 7px 10px;
+  }
+
+  .kv {
+    display: flex; flex-wrap: wrap; gap: 6px 18px;
+    margin-top: 10px; padding-top: 9px;
+    border-top: 1px solid var(--border);
+    font-size: 0.74rem;
+  }
+  .kv .k { color: var(--muted); }
+  .kv .v { font-family: var(--mono); }
+
+  .scroll-hint {
+    display: none;
+    margin-top: 10px;
+    font-size: 0.74rem;
+    color: var(--clinical);
+    text-decoration: none;
+  }
+  .scroll-hint:hover { text-decoration: underline; }
+
+  /* ---------- Grad-CAM, below the fold by design ---------- */
+  #gradcam-card { display: none; margin-top: 14px; }
+  .gradcam-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .gradcam-grid figure { margin: 0; }
+  .gradcam-grid img { width: 100%; border-radius: 6px; border: 1px solid var(--border); display: block; }
+  .gradcam-grid figcaption { font-size: 0.72rem; color: var(--muted); margin-top: 4px; text-align: center; }
+  .gradcam-note { font-size: 0.74rem; color: var(--muted); margin: 10px 0 0; }
+
+  footer {
+    max-width: 1180px; margin: 0 auto; padding: 0 16px 24px;
+    color: var(--muted); font-size: 0.72rem; text-align: center;
+  }
+  footer a { color: var(--clinical); text-decoration: none; }
+
+  @media (max-width: 760px) {
+    .workspace { grid-template-columns: 1fr; }
+    .dropzone { min-height: 140px; }
+    .gradcam-grid { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 480px) {
+    .pipeline { grid-template-columns: 1fr; }
+    .titles p { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="mark" aria-hidden="true">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <path d="M6 2v6a6 6 0 0 0 12 0V2"/><path d="M4 2h4M16 2h4"/><circle cx="12" cy="19" r="3"/><path d="M12 14v2"/>
+      </svg>
+    </div>
+    <div class="titles">
+      <h1>Breast Cancer Histopathology Classifier</h1>
+      <p>Automated analysis of H&amp;E-stained breast tissue — BreakHis / ResNet50</p>
+    </div>
+    <span class="ruo-badge">Research use only</span>
+  </div>
+</header>
+
+<main>
+  <div class="notice">
+    <strong>Not a medical diagnosis.</strong>
+    Research and educational use only; not clinically validated.
+    <details>
+      <summary>What the labels mean</summary>
+      <p>
+        <strong>“Benign” means a non-cancerous tumour, not healthy tissue.</strong>
+        Every image in this dataset comes from a tumour biopsy, so the model has
+        never seen normal tissue. It does not estimate ER, PR, HER2 or
+        triple-negative status, which require immunohistochemistry.
+      </p>
+    </details>
+  </div>
+
+  <div class="workspace">
+    <!-- Left: input -->
+    <form id="predict-form" class="card">
+      <div class="card-head">Specimen input</div>
+      <div class="card-body">
+        <label class="field" for="file-input">Histopathology image</label>
+        <div class="dropzone" id="dropzone" tabindex="0" role="button"
+             aria-label="Choose a histopathology image file" onkeydown="handleDropzoneKey(event)">
+          <img id="preview" alt="Selected specimen" />
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v13"/>
+          </svg>
+          <span class="dz-main" id="dropzone-text">Select or drop an image</span>
+          <span class="dz-sub">H&amp;E-stained breast histology · PNG or JPEG</span>
+          <input type="file" id="file-input" accept="image/*" />
+        </div>
+
+        <div class="mag">
+          <label class="field" for="magnification">Magnification</label>
+          <select id="magnification" name="magnification">
+            <option value="40">40× — low power</option>
+            <option value="100">100×</option>
+            <option value="200">200×</option>
+            <option value="400">400× — high power</option>
+          </select>
+        </div>
+
+        <button type="submit" class="analyze" id="submit-btn" disabled>Analyse specimen</button>
+        <div id="status" role="status" aria-live="polite"></div>
+      </div>
+    </form>
+
+    <!-- Right: results, visible without scrolling -->
+    <section class="card" aria-live="polite">
+      <div class="card-head">Analysis report</div>
+      <div class="card-body">
+        <div class="pipeline">
+          <div class="stage" id="stage-1" data-state="idle">
+            <span class="num">STAGE 1</span>
+            <span class="nm">Image validation</span>
+            <span class="st" id="stage-1-status">Awaiting image</span>
+          </div>
+          <div class="stage" id="stage-2" data-state="idle">
+            <span class="num">STAGE 2</span>
+            <span class="nm">Benign vs malignant</span>
+            <span class="st" id="stage-2-status">Not run</span>
+          </div>
+          <div class="stage" id="stage-3" data-state="idle">
+            <span class="num">STAGE 3</span>
+            <span class="nm">Malignant subtype</span>
+            <span class="st" id="stage-3-status">Not run</span>
+          </div>
+        </div>
+
+        <div class="placeholder" id="placeholder">
+          Select an image and press <strong>Analyse specimen</strong> — the result appears here.
+        </div>
+
+        <div id="report">
+          <div class="finding" id="finding">
+            <span class="dot" aria-hidden="true"></span>
+            <span class="txt">
+              <span class="lbl" id="result-label"></span>
+              <span class="sub" id="result-sub"></span>
+            </span>
+            <span class="pct" id="result-confidence"></span>
+          </div>
+
+          <div class="probs">
+            <div class="prob-row">
+              <span class="nm">Benign</span>
+              <span class="track"><span class="fill benign" id="bar-benign"></span></span>
+              <span class="val" id="val-benign"></span>
+            </div>
+            <div class="prob-row">
+              <span class="nm">Malignant</span>
+              <span class="track"><span class="fill malignant" id="bar-malignant"></span></span>
+              <span class="val" id="val-malignant"></span>
+            </div>
+          </div>
+
+          <div class="subtype-block" id="subtype-section">
+            <span class="k">Malignant subtype</span>
+            <div id="subtype-present">
+              <div class="subtype-head">
+                <span class="subtype-label" id="subtype-label"></span>
+                <span class="subtype-confidence" id="subtype-confidence"></span>
+              </div>
+              <div class="subtype-caveat" id="subtype-caveat">
+                <strong>Not statistically validated</strong> — only 5–9 patients
+                per rare subtype in the dataset, and only four subtypes exist in it.
+              </div>
+            </div>
+            <div class="unavailable" id="subtype-unavailable"></div>
+          </div>
+
+          <div class="kv">
+            <span><span class="k">Magnification</span> <span class="v" id="kv-mag"></span></span>
+            <span><span class="k">Model</span> <span class="v" id="kv-model"></span></span>
+            <span><span class="k">Threshold</span> <span class="v">0.50</span></span>
+            <span><span class="k">Specimen</span> <span class="v" id="kv-file"></span></span>
+          </div>
+
+          <a class="scroll-hint" id="scroll-hint" href="#gradcam-card">↓ View Grad-CAM attention map</a>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Below the fold: the Grad-CAM heat map -->
+  <section class="card" id="gradcam-card">
+    <div class="card-head">Grad-CAM attention map <span class="aside">Where the model looked</span></div>
+    <div class="card-body">
+      <div class="gradcam-grid">
+        <figure>
+          <img id="gradcam-original" alt="Original specimen" />
+          <figcaption>Original specimen</figcaption>
+        </figure>
+        <figure>
+          <img id="result-overlay" alt="Grad-CAM heat map over the specimen, showing regions that most influenced the classification" />
+          <figcaption>Attention overlay — warmer = more influence</figcaption>
+        </figure>
+      </div>
+      <p class="gradcam-note">
+        Illustrative only — a plausible-looking heat map is not evidence that the
+        model reasoned about clinically meaningful features.
+      </p>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <a href="/health">Service health</a> ·
+  <a href="/metrics">Prediction metrics</a> ·
+  <a href="/docs">API reference</a>
+</footer>
+
+<script>
+  const dropzone = document.getElementById("dropzone");
+  const dropzoneText = document.getElementById("dropzone-text");
+  const fileInput = document.getElementById("file-input");
+  const preview = document.getElementById("preview");
+  const form = document.getElementById("predict-form");
+  const submitBtn = document.getElementById("submit-btn");
+  const statusEl = document.getElementById("status");
+  const placeholder = document.getElementById("placeholder");
+  const reportEl = document.getElementById("report");
+  const gradcamCard = document.getElementById("gradcam-card");
+  const scrollHint = document.getElementById("scroll-hint");
+  const finding = document.getElementById("finding");
+  const resultLabel = document.getElementById("result-label");
+  const resultSub = document.getElementById("result-sub");
+  const resultConfidence = document.getElementById("result-confidence");
+  const resultOverlay = document.getElementById("result-overlay");
+  const gradcamOriginal = document.getElementById("gradcam-original");
+  const subtypeSection = document.getElementById("subtype-section");
+  const subtypePresent = document.getElementById("subtype-present");
+  const subtypeUnavailable = document.getElementById("subtype-unavailable");
+  const subtypeLabel = document.getElementById("subtype-label");
+  const subtypeConfidence = document.getElementById("subtype-confidence");
+
+  const DISPLAY_LABEL = { benign: "Benign", malignant: "Malignant (Cancer)" };
+  const SUB_TEXT = {
+    benign: "No malignancy detected in this image",
+    malignant: "Features consistent with carcinoma",
+  };
+
+  let selectedFile = null;
+
+  function setStage(n, state, text) {
+    document.getElementById("stage-" + n).dataset.state = state;
+    document.getElementById("stage-" + n + "-status").textContent = text;
+  }
+
+  function showResults(show) {
+    placeholder.style.display = show ? "none" : "block";
+    reportEl.style.display = show ? "block" : "none";
+    gradcamCard.style.display = show ? "block" : "none";
+  }
+
+  function setStatus(message, isError) {
+    statusEl.classList.toggle("error", Boolean(isError));
+    statusEl.textContent = message || "";
+  }
+
+  function setBusy(message) {
+    statusEl.classList.remove("error");
+    statusEl.innerHTML = '<span class="spinner"></span>' + message;
+  }
+
+  function selectFile(file) {
+    if (!file) return;
+    selectedFile = file;
+    submitBtn.disabled = false;
+    dropzoneText.textContent = file.name + " — click to change";
+    const url = URL.createObjectURL(file);
+    preview.src = url;
+    gradcamOriginal.src = url;
+    preview.style.display = "block";
+    dropzone.classList.add("has-image");
+    showResults(false);
+    setStage(1, "idle", "Ready");
+    setStage(2, "idle", "Not run");
+    setStage(3, "idle", "Not run");
+    setStatus("");
+  }
+
+  dropzone.addEventListener("click", () => fileInput.click());
+  function handleDropzoneKey(e) {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      fileInput.click();
+    }
+  }
+  fileInput.addEventListener("change", () => selectFile(fileInput.files[0]));
+
+  ["dragover", "dragenter"].forEach((evt) =>
+    dropzone.addEventListener(evt, (e) => {
+      e.preventDefault();
+      dropzone.classList.add("dragover");
+    })
+  );
+  ["dragleave", "drop"].forEach((evt) =>
+    dropzone.addEventListener(evt, (e) => {
+      e.preventDefault();
+      dropzone.classList.remove("dragover");
+    })
+  );
+  dropzone.addEventListener("drop", (e) => {
+    const file = e.dataTransfer.files && e.dataTransfer.files[0];
+    if (file) selectFile(file);
+  });
+
+  function renderReport(data) {
+    const malignantP = data.probability;
+    const benignP = 1 - malignantP;
+    const shown = data.label === "malignant" ? malignantP : benignP;
+
+    finding.className = "finding " + data.label;
+    resultLabel.textContent = DISPLAY_LABEL[data.label] || data.label;
+    resultSub.textContent = SUB_TEXT[data.label] || "";
+    resultConfidence.textContent = (shown * 100).toFixed(1) + "%";
+
+    document.getElementById("bar-benign").style.width = (benignP * 100).toFixed(1) + "%";
+    document.getElementById("bar-malignant").style.width = (malignantP * 100).toFixed(1) + "%";
+    document.getElementById("val-benign").textContent = (benignP * 100).toFixed(1) + "%";
+    document.getElementById("val-malignant").textContent = (malignantP * 100).toFixed(1) + "%";
+
+    document.getElementById("kv-mag").textContent = data.magnification + "×";
+    document.getElementById("kv-model").textContent = data.model_magnification
+      ? data.model_magnification + "× model"
+      : "default model (no " + data.magnification + "× model deployed)";
+    document.getElementById("kv-file").textContent = selectedFile ? selectedFile.name : "—";
+
+    resultOverlay.src = "data:image/png;base64," + data.gradcam_overlay_base64;
+
+    setStage(1, "ok", "Valid histology");
+    setStage(2, data.label === "malignant" ? "fail" : "ok", DISPLAY_LABEL[data.label]);
+
+    if (data.label !== "malignant") {
+      subtypeSection.style.display = "none";
+      setStage(3, "idle", "Not applicable");
+    } else if (data.subtype) {
+      subtypeLabel.textContent = data.subtype_display_name || data.subtype;
+      subtypeConfidence.textContent = (data.subtype_confidence * 100).toFixed(1) + "% confidence";
+      subtypePresent.style.display = "block";
+      subtypeUnavailable.style.display = "none";
+      subtypeSection.style.display = "block";
+      setStage(3, "fail", data.subtype_display_name || data.subtype);
+    } else if (data.subtype_unavailable_reason) {
+      subtypePresent.style.display = "none";
+      subtypeUnavailable.textContent = data.subtype_unavailable_reason;
+      subtypeUnavailable.style.display = "block";
+      subtypeSection.style.display = "block";
+      setStage(3, "skip", "Not reported");
+    } else {
+      subtypeSection.style.display = "none";
+      setStage(3, "idle", "Unavailable");
+    }
+
+    showResults(true);
+    scrollHint.style.display = "inline-block";
+  }
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (!selectedFile) return;
+
+    submitBtn.disabled = true;
+    setBusy("Analysing specimen…");
+    showResults(false);
+    setStage(1, "busy", "Checking…");
+    setStage(2, "idle", "Queued");
+    setStage(3, "idle", "Queued");
+
+    const formData = new FormData();
+    formData.append("file", selectedFile);
+    formData.append("magnification", document.getElementById("magnification").value);
+
+    try {
+      const resp = await fetch("/predict", { method: "POST", body: formData });
+      if (!resp.ok) {
+        let detail = resp.statusText;
+        try {
+          const body = await resp.json();
+          detail = body.detail || detail;
+        } catch (_) {}
+        if (resp.status === 422) setStage(1, "fail", "Rejected");
+        else if (resp.status === 400) setStage(1, "fail", "Unreadable file");
+        else setStage(1, "idle", "Not run");
+        setStage(2, "idle", "Not run");
+        setStage(3, "idle", "Not run");
+        throw new Error(detail);
+      }
+      renderReport(await resp.json());
+      setStatus("");
+    } catch (err) {
+      setStatus(err.message || "Something went wrong.", true);
+    } finally {
+      submitBtn.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>

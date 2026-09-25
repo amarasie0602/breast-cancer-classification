@@ -1,0 +1,26 @@
+# Same hyperparameters as train_real.yaml, but with class-balanced sampling.
+#
+# The models trained without it reach sensitivity 0.88-0.99 and specificity
+# 0.46-0.73 on test -- they call roughly half of benign tissue malignant.
+# BreakHis is ~2.2:1 malignant to benign, so "malignant" is the cheap guess
+# and unweighted training takes it. Sampling both classes equally removes
+# that prior; the point of this config is to measure whether specificity
+# improves without giving up meaningful sensitivity.
+epochs: 10
+batch_size: 32
+learning_rate: 1.0e-4
+weight_decay: 1.0e-5
+lr_scheduler:
+  patience: 2
+  factor: 0.5
+early_stopping:
+  patience: 3
+  min_delta: 0.001
+freeze_backbone_epochs: 1
+# Deliberately NOT checkpoints/: train.py writes best_mag{magnification}.pt
+# unconditionally, so pointing an experiment at the same directory silently
+# overwrites the production checkpoint with a half-trained one the first
+# time any epoch "improves" on nothing. That happened once already during
+# this experiment and was only recoverable because of a manual backup.
+checkpoint_dir: checkpoints/experiments/balanced
+balance_classes: true
