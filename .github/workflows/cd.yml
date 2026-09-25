@@ -5,7 +5,7 @@ on:
     branches: [main]
 
 env:
-  IMAGE: ghcr.io/${{ github.repository_owner }}/breast-cancer-classifier
+  IMAGE: ghcr.io/${{ github.repository_owner }}/breast-cancer-classification
 
 jobs:
   build-and-push:

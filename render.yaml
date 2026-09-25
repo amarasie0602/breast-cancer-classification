@@ -1,9 +1,9 @@
 services:
   - type: web
-    name: breast-cancer-classifier
+    name: breast-cancer-classification
     runtime: image
     image:
-      url: ghcr.io/amarasie0602/breast-cancer-classifier:latest
+      url: ghcr.io/amarasie0602/breast-cancer-classification:latest
     plan: free
     region: oregon
     healthCheckPath: /health

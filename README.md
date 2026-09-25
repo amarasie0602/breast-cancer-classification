@@ -180,7 +180,7 @@ dataset, and a Docker build check to catch container-breaking changes
 before merge.
 
 **CD** (`.github/workflows/cd.yml`) builds the serving image and pushes it to
-GitHub Container Registry (`ghcr.io/<owner>/breast-cancer-classifier`) on
+GitHub Container Registry (`ghcr.io/<owner>/breast-cancer-classification`) on
 merge to `main` — no external account needed. The final deploy step is
 gated on an optional `DEPLOY_HOOK_URL` repository secret; add a deploy-hook
 URL from Render, Railway, or a similar free-tier host to enable automatic

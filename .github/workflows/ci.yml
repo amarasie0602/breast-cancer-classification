@@ -78,6 +78,6 @@ jobs:
         with:
           context: .
           push: false
-          tags: breast-cancer-classifier:ci
+          tags: breast-cancer-classification:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
