@@ -289,6 +289,28 @@ environment variable for anyone who wants to move it deliberately. Where it
 belongs depends on the cost of a missed cancer versus a false alarm — a
 clinical judgement this project can inform but shouldn't quietly make.
 
+### Class-balanced retraining was tried, and not adopted
+
+Retraining the 200x model with class-balanced sampling
+(`configs/train_balanced.yaml`) against the same held-out test split:
+
+| 200x, test set | Original | Balanced |
+| --- | --- | --- |
+| Sensitivity | **0.990** | 0.929 |
+| Specificity | 0.732 | **0.817** |
+| Accuracy | **0.925** | 0.900 |
+| Missed cancers (of 210) | **2** | 15 |
+| False alarms (of 71 benign) | 19 | **13** |
+
+Balancing did raise specificity, but by trading 13 additional missed
+cancers for 6 fewer false alarms. For a screening-style task, where a missed
+malignancy is the costlier error, that is the wrong direction, so the
+original checkpoint stays in service. The balanced checkpoint is kept under
+`checkpoints/experiments/balanced/` for reference. With 11 test patients
+either difference is also within sampling noise; the honest summary is that
+balancing moves the model along the sensitivity/specificity trade-off rather
+than improving it.
+
 ### Validation flatters these models relative to test
 
 Specificity at threshold 0.5 is 0.81-0.96 on validation but 0.46-0.73 on
