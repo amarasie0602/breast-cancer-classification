@@ -106,7 +106,16 @@ def _classify_subtype(tensor):
     if not os.path.exists(SUBTYPE_CHECKPOINT_PATH):
         return None
 
-    scheme = subtype_checkpoint_scheme(SUBTYPE_CHECKPOINT_PATH)
+    try:
+        scheme = subtype_checkpoint_scheme(SUBTYPE_CHECKPOINT_PATH)
+    except Exception:  # noqa: BLE001 - any unreadable file means the same thing here
+        # A corrupt file, a Git LFS pointer checked out without `lfs: true`,
+        # or a checkpoint from an incompatible version. Stage 3 is optional,
+        # so this must not turn a perfectly good stage-2 result into a 500.
+        return (
+            "Subtype classification is unavailable: the subtype model file could "
+            "not be loaded."
+        )
     names = SUBTYPE_SCHEMES[scheme]["names"]
     minimum = MIN_MACRO_F1_BY_SCHEME[scheme]
     chance = 1 / len(names)

@@ -364,3 +364,29 @@ def test_two_class_checkpoint_is_held_to_a_two_class_bar(monkeypatch, tmp_path):
     assert body["subtype"] is None
     assert "0.70" in body["subtype_unavailable_reason"]
     assert "0.50" in body["subtype_unavailable_reason"]
+
+
+def test_unreadable_subtype_file_degrades_instead_of_500(monkeypatch, tmp_path):
+    """E.g. a Git LFS pointer checked out without `lfs: true`: stage 2's
+    result must still come back, with stage 3 marked unavailable."""
+    binary = _make_forced_binary_checkpoint(tmp_path, force_malignant=True)
+    pointer = tmp_path / "best_subtype.pt"
+    pointer.write_text(
+        "version https://git-lfs.github.com/spec/v1\n"
+        "oid sha256:0123456789abcdef\nsize 48598869\n"
+    )
+    get_model.cache_clear()
+    monkeypatch.setattr("src.serving.app.CHECKPOINT_PATH", str(binary))
+    monkeypatch.setattr("src.serving.app.SUBTYPE_CHECKPOINT_PATH", str(pointer))
+
+    resp = client.post(
+        "/predict",
+        files={"file": ("sample.png", _fake_histology_bytes(), "image/png")},
+        data={"magnification": "40"},
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["label"] == "malignant"
+    assert body["subtype"] is None
+    assert "could not be loaded" in body["subtype_unavailable_reason"]

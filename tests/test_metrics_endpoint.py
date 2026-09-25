@@ -37,6 +37,9 @@ def test_metrics_reflects_recorded_predictions(monkeypatch, tmp_path):
     save_checkpoint(checkpoint_path, model, optimizer, epoch=0, metrics={})
     get_model.cache_clear()
     monkeypatch.setattr("src.serving.app.CHECKPOINT_PATH", str(checkpoint_path))
+    # Untrained model: the label is random. If it says malignant, stage 3
+    # would otherwise try whatever subtype file happens to be on disk.
+    monkeypatch.setattr("src.serving.app.SUBTYPE_CHECKPOINT_PATH", "nonexistent_subtype.pt")
 
     client.post(
         "/predict",
