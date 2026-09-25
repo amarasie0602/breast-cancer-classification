@@ -19,3 +19,19 @@ def test_subtype_dataset_getitem_returns_subtype_label(breakhis_root_all_subtype
     ds = BreakHisSubtypeDataset(breakhis_root_all_subtypes)
     image, label = ds[0]
     assert label in SUBTYPE_LABEL_MAP.values()
+
+
+def test_ductal_vs_other_scheme_pools_non_ductal_subtypes(breakhis_root_all_subtypes):
+    ds = BreakHisSubtypeDataset(breakhis_root_all_subtypes, scheme="ductal_vs_other")
+    labels = {s["subtype"]: s["label"] for s in ds.samples}
+    assert labels["ductal_carcinoma"] == 0
+    assert labels["lobular_carcinoma"] == 1
+    assert labels["mucinous_carcinoma"] == 1
+    assert labels["papillary_carcinoma"] == 1
+
+
+def test_unknown_scheme_is_rejected(breakhis_root_all_subtypes):
+    import pytest
+
+    with pytest.raises(ValueError, match="unknown subtype scheme"):
+        BreakHisSubtypeDataset(breakhis_root_all_subtypes, scheme="nonsense")

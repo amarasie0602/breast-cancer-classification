@@ -19,7 +19,7 @@ from typing import Tuple, Union
 from torch import nn, optim
 from torch.utils.data import DataLoader, WeightedRandomSampler
 
-from src.data.dataset import SUBTYPE_NAMES, BreakHisSubtypeDataset
+from src.data.dataset import DEFAULT_SUBTYPE_SCHEME, SUBTYPE_SCHEMES, BreakHisSubtypeDataset
 from src.data.splits import filter_samples_by_patients, stratified_patient_split
 from src.data.transforms import eval_transform, strong_train_transform
 from src.models.classifier import MalignantSubtypeClassifier
@@ -28,16 +28,15 @@ from src.training.early_stopping import EarlyStopping
 from src.training.subtype_loop import evaluate, train_one_epoch
 from src.training.train import load_config
 
-NUM_SUBTYPES = len(SUBTYPE_NAMES)
-
-
 def build_dataloaders(
     data_root: Union[str, Path],
     split_ratios: Tuple[float, float, float],
     seed: int,
     batch_size: int,
+    scheme: str = DEFAULT_SUBTYPE_SCHEME,
 ) -> Tuple[DataLoader, DataLoader]:
-    full_ds = BreakHisSubtypeDataset(data_root)
+    num_classes = len(SUBTYPE_SCHEMES[scheme]["names"])
+    full_ds = BreakHisSubtypeDataset(data_root, scheme=scheme)
     # min_per_split=1: lobular_carcinoma has only 5 patients in all of
     # BreakHis, and plain ratio rounding leaves it with 0 test patients --
     # i.e. a class the test set literally cannot measure.
@@ -45,17 +44,17 @@ def build_dataloaders(
         full_ds.samples, ratios=tuple(split_ratios), seed=seed, min_per_split=1
     )
 
-    train_ds = BreakHisSubtypeDataset(data_root, transform=strong_train_transform())
+    train_ds = BreakHisSubtypeDataset(data_root, transform=strong_train_transform(), scheme=scheme)
     train_ds.samples = filter_samples_by_patients(train_ds.samples, train_patients)
 
-    val_ds = BreakHisSubtypeDataset(data_root, transform=eval_transform())
+    val_ds = BreakHisSubtypeDataset(data_root, transform=eval_transform(), scheme=scheme)
     val_ds.samples = filter_samples_by_patients(val_ds.samples, val_patients)
 
     # Class-balanced sampling on top of the weighted loss: ductal_carcinoma
     # is ~64% of malignant images, so with plain shuffling a batch of 32
     # often contains zero papillary or lobular examples, and the gradient
     # for those classes arrives too sparsely to learn much.
-    weights_per_class = _class_weights(train_ds.samples)
+    weights_per_class = _class_weights(train_ds.samples, num_classes)
     sample_weights = [weights_per_class[s["label"]] for s in train_ds.samples]
     sampler = WeightedRandomSampler(
         sample_weights, num_samples=len(train_ds.samples), replacement=True
@@ -67,14 +66,14 @@ def build_dataloaders(
     )
 
 
-def _class_weights(samples: list) -> list:
-    """Inverse-frequency class weights for CrossEntropyLoss, since
-    ductal_carcinoma outnumbers papillary_carcinoma roughly 6:1."""
-    counts = [0] * NUM_SUBTYPES
+def _class_weights(samples: list, num_classes: int) -> list:
+    """Inverse-frequency per-class weights, since ductal_carcinoma
+    outnumbers papillary_carcinoma roughly 6:1."""
+    counts = [0] * num_classes
     for s in samples:
         counts[s["label"]] += 1
     total = sum(counts)
-    return [total / (NUM_SUBTYPES * c) if c > 0 else 0.0 for c in counts]
+    return [total / (num_classes * c) if c > 0 else 0.0 for c in counts]
 
 
 def run_training(
@@ -87,11 +86,16 @@ def run_training(
 ) -> float:
     import mlflow
 
+    scheme = config.get("label_scheme", DEFAULT_SUBTYPE_SCHEME)
+    class_names = SUBTYPE_SCHEMES[scheme]["names"]
+    num_classes = len(class_names)
+    checkpoint_name = config.get("checkpoint_name", "best_subtype.pt")
+
     train_loader, val_loader = build_dataloaders(
-        data_root, split_ratios, seed, config["batch_size"]
+        data_root, split_ratios, seed, config["batch_size"], scheme=scheme
     )
 
-    model = MalignantSubtypeClassifier(num_classes=NUM_SUBTYPES, pretrained=pretrained).to(device)
+    model = MalignantSubtypeClassifier(num_classes=num_classes, pretrained=pretrained).to(device)
     # Plain (unweighted) loss on purpose: the WeightedRandomSampler in
     # build_dataloaders already makes the classes roughly equiprobable in
     # every batch. Applying inverse-frequency weights on top would correct
@@ -114,13 +118,15 @@ def run_training(
     best_macro_f1 = -1.0
 
     with mlflow.start_run():
-        mlflow.set_tags({"model_variant": "resnet50", "task": "malignant_subtype"})
+        mlflow.set_tags(
+            {"model_variant": "efficientnet_b0", "task": "malignant_subtype", "label_scheme": scheme}
+        )
         mlflow.log_params(
             {
                 "learning_rate": config["learning_rate"],
                 "batch_size": config["batch_size"],
                 "weight_decay": config["weight_decay"],
-                "subtypes": ",".join(SUBTYPE_NAMES),
+                "subtypes": ",".join(class_names),
             }
         )
 
@@ -130,7 +136,7 @@ def run_training(
                 model.unfreeze_backbone()
 
             train_loss = train_one_epoch(model, train_loader, optimizer, criterion, device)
-            val_metrics = evaluate(model, val_loader, criterion, device, num_classes=NUM_SUBTYPES)
+            val_metrics = evaluate(model, val_loader, criterion, device, num_classes=num_classes)
             scheduler.step(val_metrics["loss"])
 
             mlflow.log_metric("train_loss", train_loss, step=epoch)
@@ -141,12 +147,14 @@ def run_training(
 
             if val_metrics["macro_f1"] > best_macro_f1:
                 best_macro_f1 = val_metrics["macro_f1"]
+                # The label scheme travels with the weights: serving needs it
+                # to build the right-sized head and name the classes.
                 save_checkpoint(
-                    checkpoint_dir / "best_subtype.pt",
+                    checkpoint_dir / checkpoint_name,
                     model,
                     optimizer,
                     epoch,
-                    val_metrics,
+                    {**val_metrics, "label_scheme": scheme},
                 )
 
             if early_stopping.step(val_metrics["loss"]):

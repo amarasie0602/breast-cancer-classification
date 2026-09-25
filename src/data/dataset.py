@@ -38,6 +38,34 @@ SUBTYPE_DISPLAY_NAMES = {
     "papillary_carcinoma": "Papillary Carcinoma",
 }
 
+# Ways of labelling the malignant samples for stage 3. "four_subtypes" is the
+# original 4-way split; it does not learn, because lobular, papillary and
+# mucinous carcinoma have only 5, 6 and 9 patients in the whole dataset (see
+# docs/model_card.md). "ductal_vs_other" asks the coarser question the data
+# can actually support: ductal carcinoma (38 patients) versus every other
+# malignant subtype pooled (20 patients).
+SUBTYPE_SCHEMES = {
+    "four_subtypes": {
+        "label_map": SUBTYPE_LABEL_MAP,
+        "names": SUBTYPE_NAMES,
+        "display": SUBTYPE_DISPLAY_NAMES,
+    },
+    "ductal_vs_other": {
+        "label_map": {
+            "ductal_carcinoma": 0,
+            "lobular_carcinoma": 1,
+            "mucinous_carcinoma": 1,
+            "papillary_carcinoma": 1,
+        },
+        "names": ("ductal_carcinoma", "other_malignant"),
+        "display": {
+            "ductal_carcinoma": "Invasive Ductal Carcinoma (IDC)",
+            "other_malignant": "Non-ductal carcinoma (lobular, mucinous or papillary)",
+        },
+    },
+}
+DEFAULT_SUBTYPE_SCHEME = "four_subtypes"
+
 
 class BreakHisDataset(Dataset):
     def __init__(
@@ -108,15 +136,20 @@ class BreakHisSubtypeDataset(Dataset):
         root: Union[str, Path],
         magnification: Optional[Union[str, int]] = None,
         transform: Optional[Callable] = None,
+        scheme: str = DEFAULT_SUBTYPE_SCHEME,
     ):
+        if scheme not in SUBTYPE_SCHEMES:
+            raise ValueError(f"unknown subtype scheme {scheme!r}; expected one of {list(SUBTYPE_SCHEMES)}")
         self.root = Path(root)
         self.magnification = str(magnification) if magnification else None
         self.transform = transform
+        self.scheme = scheme
+        label_map = SUBTYPE_SCHEMES[scheme]["label_map"]
         base = BreakHisDataset(root, magnification=magnification)
         self.samples = [
-            {**s, "label": SUBTYPE_LABEL_MAP[s["subtype"]]}
+            {**s, "label": label_map[s["subtype"]]}
             for s in base.samples
-            if s["subtype"] in SUBTYPE_LABEL_MAP
+            if s["subtype"] in label_map
         ]
 
     def __len__(self) -> int:
