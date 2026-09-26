@@ -12,7 +12,9 @@ COPY --from=builder /install /usr/local
 
 COPY src/ src/
 COPY configs/ configs/
-COPY checkpoints/best_mag40.pt checkpoints/best_mag40.pt
+# Weights-only models: one binary model per magnification, plus the
+# (gated-off) subtype model. See scripts/export_serving_checkpoints.py.
+COPY serving_checkpoints/ serving_checkpoints/
 
 RUN useradd --create-home --uid 1000 appuser
 USER appuser
