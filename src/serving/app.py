@@ -29,7 +29,11 @@ from src.serving.schemas import PredictionResponse
 app = FastAPI(title="Breast Cancer Histopathology Classifier")
 app.add_middleware(RequestLoggingMiddleware)
 
-CHECKPOINT_PATH = os.environ.get("CHECKPOINT_PATH", "checkpoints/best_mag40.pt")
+# The app serves the weights-only copies in serving_checkpoints/, both locally
+# and in the image, so what runs here is exactly what ships. They are written
+# from the training checkpoints in checkpoints/ by
+# `python -m scripts.export_serving_checkpoints`; re-run it after retraining.
+CHECKPOINT_PATH = os.environ.get("CHECKPOINT_PATH", "serving_checkpoints/best_mag40.pt")
 
 # One binary model is trained per magnification, and they are not
 # interchangeable: on the held-out test set the 40x model's specificity is
@@ -38,9 +42,11 @@ CHECKPOINT_PATH = os.environ.get("CHECKPOINT_PATH", "checkpoints/best_mag40.pt")
 # best_mag{magnification}.pt from this directory when it exists and falls back
 # to CHECKPOINT_PATH when it doesn't (e.g. a container that only ships the
 # 40x checkpoint).
-CHECKPOINT_DIR = Path(os.environ.get("CHECKPOINT_DIR", "checkpoints"))
+CHECKPOINT_DIR = Path(os.environ.get("CHECKPOINT_DIR", "serving_checkpoints"))
 ALLOWED_MAGNIFICATIONS = ("40", "100", "200", "400")
-SUBTYPE_CHECKPOINT_PATH = os.environ.get("SUBTYPE_CHECKPOINT_PATH", "checkpoints/best_subtype.pt")
+SUBTYPE_CHECKPOINT_PATH = os.environ.get(
+    "SUBTYPE_CHECKPOINT_PATH", "serving_checkpoints/best_subtype.pt"
+)
 STATIC_DIR = Path(__file__).parent / "static"
 
 # Operating point for benign/malignant. 0.5 is where sigmoid happens to
