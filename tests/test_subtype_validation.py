@@ -25,7 +25,7 @@ from src.training.subtype_loop import evaluate
 MIN_MACRO_F1 = 0.5
 _MIN_REAL_CHECKPOINT_BYTES = 1_000_000
 
-CHECKPOINT_PATH = os.environ.get("VALIDATION_SUBTYPE_CHECKPOINT_PATH", "checkpoints/best_subtype.pt")
+CHECKPOINT_PATH = os.environ.get("VALIDATION_SUBTYPE_CHECKPOINT_PATH", "serving_checkpoints/best_subtype.pt")
 VAL_DATA_ROOT = os.environ.get("VALIDATION_DATA_ROOT", "data/BreaKHis_v1")
 
 

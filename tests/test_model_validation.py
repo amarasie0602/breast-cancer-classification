@@ -16,13 +16,13 @@ from src.training.checkpoint import load_checkpoint
 from src.training.loop import evaluate
 
 MIN_F1 = 0.75
-# A real checkpoint is ~280MB; a Git LFS pointer file (checked out without
+# A real checkpoint is ~95MB; a Git LFS pointer file (checked out without
 # `lfs: true`, as most CI jobs do to avoid the bandwidth cost) is a few
 # hundred bytes of text. This distinguishes "no checkpoint" from "a pointer
 # stands in for one," since os.path.exists() alone can't tell them apart.
 _MIN_REAL_CHECKPOINT_BYTES = 1_000_000
 
-CHECKPOINT_PATH = os.environ.get("VALIDATION_CHECKPOINT_PATH", "checkpoints/best_mag40.pt")
+CHECKPOINT_PATH = os.environ.get("VALIDATION_CHECKPOINT_PATH", "serving_checkpoints/best_mag40.pt")
 VAL_DATA_ROOT = os.environ.get("VALIDATION_DATA_ROOT", "data/BreaKHis_v1")
 
 
