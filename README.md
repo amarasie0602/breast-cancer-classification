@@ -63,21 +63,23 @@ trained on all magnifications combined (see model card for why).
 
 ## Architecture
 
-The checkpoint that gets served is the same artifact the model-validation
-gate checks locally before a push — there is no separate "production
-model" step:
+The models that get served are the same files the model-validation gate
+checks locally before a push, and the same files the app loads when run
+locally: weights-only copies of the training checkpoints, one per
+magnification, so a 200x image is classified by the 200x model:
 
 ```mermaid
 flowchart LR
     subgraph Train["Training  (local, CPU)"]
-        DS[("BreakHis dataset<br/>DVC-tracked")] --> TR["train.py (binary)<br/>train_subtype.py (subtype)<br/>ResNet50 transfer learning"]
+        DS[("BreakHis dataset<br/>DVC-tracked")] --> TR["train.py (binary, ResNet50)<br/>train_subtype.py (subtype, EfficientNet-B0)<br/>transfer learning"]
         TR -->|"params + per-epoch metrics"| ML[("MLflow tracking")]
-        TR -->|"saves on F1 improvement"| CK["checkpoints/best_mag*.pt<br/>checkpoints/best_subtype.pt"]
+        TR -->|"saves on F1 improvement"| CK["checkpoints/best_mag*.pt<br/>checkpoints/best_subtype.pt<br/>(~280MB, with optimizer state)"]
+        CK -->|"export_serving_checkpoints<br/>(drops optimizer state)"| SV["serving_checkpoints/<br/>4 binary models + subtype<br/>(~95MB each)"]
     end
 
     CK -->|"dvc push (all checkpoints)"| REMOTE[("DVC remote<br/>(local-path, this machine)")]
-    CK -->|"git push via Git LFS<br/>(best_mag40.pt, best_subtype.pt only —<br/>the two the serving image needs)"| GH[("GitHub repo")]
-    CK -.->|"pytest, run locally<br/>gate: F1 ≥ 0.75"| GATE["model-validation"]
+    SV -->|"git push via Git LFS"| GH[("GitHub repo")]
+    SV -.->|"pytest, run locally<br/>gate: F1 ≥ 0.75"| GATE["model-validation"]
 
     subgraph CI["CI — every push"]
         GH --> LINT["lint"]
@@ -93,7 +95,7 @@ flowchart LR
         GHCR -.->|"optional deploy hook"| HOST["Render / Railway"]
     end
 
-    CK -->|"baked into image"| API["FastAPI<br/>1. input_guard (reject non-histology)<br/>2. /predict binary<br/>3. /predict subtype (if malignant)"]
+    SV -->|"baked into image"| API["FastAPI<br/>1. input_guard (reject non-histology)<br/>2. /predict binary (model matching the<br/>selected magnification)<br/>3. /predict subtype (if malignant)"]
     API -->|"label + subtype + Grad-CAM overlay"| CLIENT["client"]
 ```
 
@@ -106,6 +108,8 @@ that gap.
 
 ```
 data/BreaKHis_v1/          Raw dataset (DVC-tracked, not in Git)
+checkpoints/               Full training checkpoints (DVC-tracked, not in Git)
+serving_checkpoints/       Weights-only copies the app serves (Git LFS)
 src/
   data/                    Dataset loaders (binary + subtype), patient-level splits, augmentation, EDA helpers
   models/                  ResNet50 transfer-learning classifiers (binary + subtype)
@@ -132,6 +136,7 @@ pytest -q                        # run the test suite
 python -m src.training.train --data-root data/BreaKHis_v1 --magnification 40
 python -m src.training.train_subtype --data-root data/BreaKHis_v1  # malignant subtype
 python -m src.training.compare_runs   # compare val F1 across magnifications
+python -m scripts.export_serving_checkpoints  # after retraining: refresh what the app serves
 uvicorn src.serving.app:app --reload  # run the API + web UI locally
 ```
 
