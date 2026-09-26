@@ -1,4 +1,2 @@
 * text=auto eol=lf
-checkpoints/best_mag40.pt filter=lfs diff=lfs merge=lfs -text
-checkpoints/best_subtype.pt filter=lfs diff=lfs merge=lfs -text
 serving_checkpoints/*.pt filter=lfs diff=lfs merge=lfs -text
