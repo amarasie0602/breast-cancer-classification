@@ -288,6 +288,17 @@ positive (a missed cancer is worse than a false alarm), but a tool that
 flags half of healthy tissue would be impractical in real use, and no
 aggregate score above should be read as "the model works."
 
+### Each magnification is served by its own model
+
+The four models above are not interchangeable, so `/predict` classifies an
+image with the model trained at the magnification the user selects. The
+serving image ships all four (as weights-only copies, see
+`scripts/export_serving_checkpoints.py`); until it did, every request in the
+deployed app was answered by the 40x model regardless of the selection.
+This only helps if the selection is right: the app has no way to check it,
+and a 400x image labelled as 200x is scored by a model that never saw
+400x tissue.
+
 ### Threshold tuning was tried, and rejected
 
 The 0.5 decision threshold is where sigmoid crosses, not a chosen operating
