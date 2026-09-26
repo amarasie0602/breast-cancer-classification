@@ -27,6 +27,9 @@ checkpoints/*
 *.pt
 !checkpoints/best_mag40.pt
 !checkpoints/best_subtype.pt
+# Weights-only copies the app serves (scripts/export_serving_checkpoints.py),
+# committed via Git LFS
+!serving_checkpoints/*.pt
 *.pth
 *.ckpt
 
