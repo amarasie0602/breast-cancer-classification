@@ -4,7 +4,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./checkpoints:/app/checkpoints:ro
+      - ./serving_checkpoints:/app/serving_checkpoints:ro
     environment:
-      - CHECKPOINT_PATH=/app/checkpoints/best_mag40.pt
-      - SUBTYPE_CHECKPOINT_PATH=/app/checkpoints/best_subtype.pt
+      - CHECKPOINT_PATH=/app/serving_checkpoints/best_mag40.pt
+      - SUBTYPE_CHECKPOINT_PATH=/app/serving_checkpoints/best_subtype.pt

@@ -9,4 +9,4 @@ services:
     healthCheckPath: /health
     envVars:
       - key: CHECKPOINT_PATH
-        value: checkpoints/best_mag40.pt
+        value: serving_checkpoints/best_mag40.pt
