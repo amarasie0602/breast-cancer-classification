@@ -19,7 +19,7 @@ client = TestClient(app)
 
 @pytest.fixture(autouse=True)
 def _isolate_checkpoint_dir(monkeypatch, tmp_path):
-    """Serving routes to checkpoints/best_mag{N}.pt when one exists, and this
+    """Serving routes to serving_checkpoints/best_mag{N}.pt when one exists, and this
     machine has real ones. Point routing at an empty directory so each test's
     CHECKPOINT_PATH is what actually runs, unless a test opts in."""
     empty = tmp_path / "no_mag_checkpoints"

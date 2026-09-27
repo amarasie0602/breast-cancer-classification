@@ -1,0 +1,9 @@
+# Allowlist: the build context is only what the Dockerfile copies. Without
+# this, every local build uploads the dataset and the full training
+# checkpoints (several GB) to the Docker daemon for nothing.
+*
+!requirements-serving.lock.txt
+!src/
+!configs/
+!serving_checkpoints/
+**/__pycache__
