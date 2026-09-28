@@ -14,6 +14,7 @@ test numbers meaningless.
 """
 
 import argparse
+import math
 
 import torch
 from torch.utils.data import DataLoader
@@ -101,7 +102,7 @@ def main() -> None:
             f" {row['youden_j']:>8.3f} {row['balanced_accuracy']:>8.3f}{marker}"
         )
 
-    default = next(r for r in rows if r["threshold"] == 0.5)
+    default = next(r for r in rows if math.isclose(r["threshold"], 0.5))
     print(
         f"\n  default 0.50 : sensitivity {default['sensitivity']:.3f}, "
         f"specificity {default['specificity']:.3f}, balanced acc {default['balanced_accuracy']:.3f}"
