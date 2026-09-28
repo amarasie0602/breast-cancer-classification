@@ -138,6 +138,7 @@
   }
 
   .dropzone {
+    width: 100%; font: inherit; color: inherit;
     border: 2px dashed var(--border-strong);
     border-radius: 8px;
     background: var(--panel-alt);
@@ -153,7 +154,7 @@
   .dropzone svg { color: var(--clinical); margin-bottom: 4px; }
   .dropzone .dz-main { font-weight: 600; font-size: 0.86rem; word-break: break-all; }
   .dropzone .dz-sub { color: var(--muted); font-size: 0.72rem; margin-top: 2px; }
-  .dropzone input { display: none; }
+  #file-input { display: none; }
   #preview {
     display: none;
     max-width: 100%;
@@ -187,7 +188,7 @@
   button.analyze:hover:not(:disabled) { background: var(--clinical-dark); }
   button.analyze:disabled { opacity: .45; cursor: not-allowed; }
 
-  #status { min-height: 1.2em; font-size: 0.8rem; color: var(--muted); margin-top: 8px; }
+  #status { display: block; min-height: 1.2em; font-size: 0.8rem; color: var(--muted); margin-top: 8px; }
   #status.error {
     color: var(--malignant); background: var(--malignant-soft);
     border: 1px solid var(--malignant); border-radius: 6px;
@@ -384,16 +385,16 @@
       <div class="card-head">Specimen input</div>
       <div class="card-body">
         <label class="field" for="file-input">Histopathology image</label>
-        <div class="dropzone" id="dropzone" tabindex="0" role="button"
-             aria-label="Choose a histopathology image file" onkeydown="handleDropzoneKey(event)">
+        <button type="button" class="dropzone" id="dropzone"
+                aria-label="Choose a histopathology image file">
           <img id="preview" alt="Selected specimen" />
           <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v13"/>
           </svg>
           <span class="dz-main" id="dropzone-text">Select or drop an image</span>
           <span class="dz-sub">H&amp;E-stained breast histology · PNG or JPEG</span>
-          <input type="file" id="file-input" accept="image/*" />
-        </div>
+        </button>
+        <input type="file" id="file-input" accept="image/*" />
 
         <div class="mag">
           <label class="field" for="magnification">Magnification</label>
@@ -406,7 +407,7 @@
         </div>
 
         <button type="submit" class="analyze" id="submit-btn" disabled>Analyse specimen</button>
-        <div id="status" role="status" aria-live="polite"></div>
+        <output id="status" aria-live="polite"></output>
       </div>
     </form>
 
@@ -586,12 +587,6 @@
   }
 
   dropzone.addEventListener("click", () => fileInput.click());
-  function handleDropzoneKey(e) {
-    if (e.key === "Enter" || e.key === " ") {
-      e.preventDefault();
-      fileInput.click();
-    }
-  }
   fileInput.addEventListener("change", () => selectFile(fileInput.files[0]));
 
   ["dragover", "dragenter"].forEach((evt) =>
