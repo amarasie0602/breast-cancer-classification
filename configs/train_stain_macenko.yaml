@@ -1,0 +1,30 @@
+# Same hyperparameters as train_real.yaml (which produced the served models);
+# the only change is that images are Macenko stain-normalized. Train with
+#   --data-root data/BreaKHis_v1_macenko   (built by scripts/normalize_dataset.py)
+#
+# Why: the served models call 27-54% of benign test images malignant.
+# Class-balanced sampling and threshold tuning both failed to fix that without
+# missing more cancers. With ~60 training patients per magnification, a
+# patient's slide colour can stand in for its label; normalizing the stain
+# removes that shortcut.
+#
+# Adoption rule, fixed before any result was seen: a magnification's model
+# replaces the served one only if, on the held-out test patients, its
+# specificity is higher AND its sensitivity is no more than 1 percentage point
+# lower. Checkpoint selection stays on validation F1, as for the served models.
+epochs: 10
+batch_size: 32
+learning_rate: 1.0e-4
+weight_decay: 1.0e-5
+lr_scheduler:
+  patience: 2
+  factor: 0.5
+early_stopping:
+  patience: 3
+  min_delta: 0.001
+freeze_backbone_epochs: 1
+stain_normalization: macenko
+# Not checkpoints/: train.py writes best_mag{N}.pt unconditionally, and an
+# experiment writing to the served path has overwritten a production model
+# once already.
+checkpoint_dir: checkpoints/experiments/stain_macenko
