@@ -25,7 +25,7 @@ from src.data.transforms import eval_transform
 from src.models.classifier import BreakHisClassifier
 from src.training.checkpoint import load_checkpoint
 from src.training.metrics import sensitivity_specificity
-from src.training.train import load_config
+from src.training.train import NUM_WORKERS, load_config
 
 THRESHOLDS = [round(0.05 * i, 2) for i in range(1, 20)]
 
@@ -87,7 +87,7 @@ def main() -> None:
     model.eval()
 
     probs, labels = collect_probabilities(
-        model, DataLoader(val_ds, batch_size=args.batch_size)
+        model, DataLoader(val_ds, batch_size=args.batch_size, num_workers=NUM_WORKERS)
     )
     rows = sweep(probs, labels)
 

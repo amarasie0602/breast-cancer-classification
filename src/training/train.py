@@ -16,6 +16,11 @@ from src.training.checkpoint import save_checkpoint
 from src.training.early_stopping import EarlyStopping
 from src.training.loop import evaluate, train_one_epoch
 
+# Data is loaded in the main process. Every result in docs/model_card.md was
+# produced this way; it is stated explicitly so changing it is a deliberate
+# choice (worker processes on Windows re-import the whole module).
+NUM_WORKERS = 0
+
 
 def load_config(path: Union[str, Path]) -> dict:
     resolved = Path(path).resolve()
@@ -63,11 +68,14 @@ def build_dataloaders(
             sampler=WeightedRandomSampler(
                 sample_weights, num_samples=len(train_ds.samples), replacement=True
             ),
+            num_workers=NUM_WORKERS,
         )
     else:
-        train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
+        train_loader = DataLoader(
+            train_ds, batch_size=batch_size, shuffle=True, num_workers=NUM_WORKERS
+        )
 
-    return train_loader, DataLoader(val_ds, batch_size=batch_size)
+    return train_loader, DataLoader(val_ds, batch_size=batch_size, num_workers=NUM_WORKERS)
 
 
 def run_training(

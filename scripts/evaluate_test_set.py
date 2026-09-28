@@ -23,7 +23,7 @@ from src.serving.model_loader import subtype_checkpoint_scheme
 from src.training.checkpoint import load_checkpoint
 from src.training.loop import evaluate as evaluate_binary
 from src.training.subtype_loop import evaluate as evaluate_subtype
-from src.training.train import load_config
+from src.training.train import NUM_WORKERS, load_config
 
 BINARY_CLASS_NAMES = ("benign", "malignant")
 
@@ -53,7 +53,7 @@ def evaluate_binary_checkpoint(checkpoint_path, data_root, magnification, ratios
 
     metrics = evaluate_binary(
         model,
-        DataLoader(test_ds, batch_size=batch_size),
+        DataLoader(test_ds, batch_size=batch_size, num_workers=NUM_WORKERS),
         torch.nn.BCEWithLogitsLoss(),
         "cpu",
     )
@@ -89,7 +89,7 @@ def evaluate_subtype_checkpoint(checkpoint_path, data_root, ratios, seed, batch_
 
     metrics = evaluate_subtype(
         model,
-        DataLoader(test_ds, batch_size=batch_size),
+        DataLoader(test_ds, batch_size=batch_size, num_workers=NUM_WORKERS),
         torch.nn.CrossEntropyLoss(),
         "cpu",
         num_classes=len(class_names),

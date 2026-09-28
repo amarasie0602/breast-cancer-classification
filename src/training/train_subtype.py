@@ -26,7 +26,7 @@ from src.models.classifier import MalignantSubtypeClassifier
 from src.training.checkpoint import save_checkpoint
 from src.training.early_stopping import EarlyStopping
 from src.training.subtype_loop import evaluate, train_one_epoch
-from src.training.train import load_config
+from src.training.train import NUM_WORKERS, load_config
 
 def build_dataloaders(
     data_root: Union[str, Path],
@@ -61,8 +61,8 @@ def build_dataloaders(
     )
 
     return (
-        DataLoader(train_ds, batch_size=batch_size, sampler=sampler),
-        DataLoader(val_ds, batch_size=batch_size),
+        DataLoader(train_ds, batch_size=batch_size, sampler=sampler, num_workers=NUM_WORKERS),
+        DataLoader(val_ds, batch_size=batch_size, num_workers=NUM_WORKERS),
     )
 
 

@@ -65,7 +65,8 @@ def test_build_dataloaders_balances_classes_when_requested(breakhis_root_multi_p
         breakhis_root_multi_patient, "40", (0.5, 0.25, 0.25), 42, 2, balance_classes=True
     )
 
-    assert plain.sampler is not None and not isinstance(plain.sampler, WeightedRandomSampler)
+    assert plain.sampler is not None
+    assert not isinstance(plain.sampler, WeightedRandomSampler)
     assert isinstance(balanced.sampler, WeightedRandomSampler)
 
     # Rarer class must carry the heavier per-sample weight.
