@@ -33,6 +33,26 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+  deploy-huggingface:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.11"
+      - name: Point the Hugging Face Space at this commit's image, if configured
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_SPACE: ${{ vars.HF_SPACE }}
+        run: |
+          if [ -z "$HF_TOKEN" ] || [ -z "$HF_SPACE" ]; then
+            echo "HF_TOKEN secret or HF_SPACE variable not set — skipping. See README."
+            exit 0
+          fi
+          pip install --only-binary :all: huggingface_hub==1.33.0
+          python -m scripts.deploy_space --space "$HF_SPACE" --image "$IMAGE:$GITHUB_SHA"
+
   deploy:
     needs: build-and-push
     runs-on: ubuntu-latest

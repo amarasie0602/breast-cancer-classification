@@ -4,7 +4,11 @@ services:
     runtime: image
     image:
       url: ghcr.io/amarasie0602/breast-cancer-classification:latest
-    plan: free
+    # Not "free": that plan has 512MB of RAM, and the app needs ~560MB with
+    # one model loaded (~330MB of it is PyTorch itself) and ~875MB once a
+    # user has tried all four magnifications. The free hosted demo runs on
+    # Hugging Face Spaces instead; see README.
+    plan: standard
     region: oregon
     healthCheckPath: /health
     envVars:
