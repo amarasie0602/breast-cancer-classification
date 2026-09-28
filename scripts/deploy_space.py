@@ -24,7 +24,8 @@ SPACE_SOURCE_DIR = Path(__file__).resolve().parent.parent / "deploy" / "huggingf
 # A lowercase repository path plus a required tag, and nothing else. The value
 # is written into the Space's Dockerfile, so anything looser (whitespace, a
 # newline) could smuggle extra Dockerfile instructions into the deployed app.
-_TAGGED_IMAGE = re.compile(r"[a-z0-9]+(?:[._/-][a-z0-9]+)*:[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}")
+# re.ASCII keeps \w to [A-Za-z0-9_]; Unicode letters are not valid in a tag.
+_TAGGED_IMAGE = re.compile(r"[a-z0-9]+(?:[._/-][a-z0-9]+)*:\w[\w.-]{0,127}", re.ASCII)
 
 
 def validated_image(image: str) -> str:
