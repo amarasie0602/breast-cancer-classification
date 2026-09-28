@@ -679,7 +679,9 @@
         try {
           const body = await resp.json();
           detail = body.detail || detail;
-        } catch (_) {}
+        } catch (_) {
+          // Not a JSON body (e.g. a proxy's HTML error page): keep the HTTP status text.
+        }
         if (resp.status === 422) setStage(1, "fail", "Rejected");
         else if (resp.status === 400) setStage(1, "fail", "Unreadable file");
         else setStage(1, "idle", "Not run");
