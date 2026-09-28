@@ -12,6 +12,7 @@ from fastapi.responses import FileResponse
 from PIL import Image, UnidentifiedImageError
 
 from src.data.dataset import SUBTYPE_SCHEMES
+from src.data.stain import MACENKO, StainNormalize
 from src.data.transforms import eval_transform
 from src.explainability.gradcam import GradCAM
 from src.explainability.overlay import cam_to_overlay
@@ -19,6 +20,7 @@ from src.serving.input_guard import looks_like_histology
 from src.serving.logging_middleware import RequestLoggingMiddleware
 from src.serving.metrics import get_prediction_distribution, record_prediction
 from src.serving.model_loader import (
+    binary_checkpoint_stain_normalization,
     get_model,
     get_subtype_model,
     subtype_checkpoint_macro_f1,
@@ -149,7 +151,7 @@ def _classify_subtype(tensor):
     responses={
         400: {"description": "Unsupported magnification, or the file is not an image"},
         422: {"description": "Not a breast histology image (stage 1 rejected it)"},
-        503: {"description": "No model checkpoint is available to serve"},
+        503: {"description": "No usable model checkpoint is available to serve"},
     },
 )
 async def predict(
@@ -178,8 +180,23 @@ async def predict(
             detail="Invalid Image — Please upload a valid breast histology image.",
         )
 
+    stain_normalization = binary_checkpoint_stain_normalization(checkpoint_path)
+    if stain_normalization not in (None, MACENKO):
+        raise HTTPException(
+            status_code=503,
+            detail=f"Model needs unsupported preprocessing: {stain_normalization}",
+        )
+
     model = get_model(checkpoint_path)
-    tensor = eval_transform()(image).unsqueeze(0)
+    # A model trained on stain-normalized images has to see the upload
+    # normalized the same way. The subtype model was trained on raw images, so
+    # it keeps getting the raw tensor, and Grad-CAM is drawn over the original.
+    raw_tensor = eval_transform()(image).unsqueeze(0)
+    tensor = (
+        eval_transform()(StainNormalize()(image)).unsqueeze(0)
+        if stain_normalization == MACENKO
+        else raw_tensor
+    )
 
     with torch.no_grad():
         logit = model(tensor)
@@ -199,7 +216,7 @@ async def predict(
     subtype = subtype_display_name = subtype_unavailable_reason = None
     subtype_confidence = None
     if label == "malignant":
-        subtype_result = _classify_subtype(tensor)
+        subtype_result = _classify_subtype(raw_tensor)
         if isinstance(subtype_result, str):
             subtype_unavailable_reason = subtype_result
         elif subtype_result is not None:

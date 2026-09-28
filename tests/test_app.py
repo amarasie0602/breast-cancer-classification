@@ -390,3 +390,60 @@ def test_unreadable_subtype_file_degrades_instead_of_500(monkeypatch, tmp_path):
     assert body["label"] == "malignant"
     assert body["subtype"] is None
     assert "could not be loaded" in body["subtype_unavailable_reason"]
+
+
+def _make_binary_checkpoint_with_preprocessing(tmp_path, stain_normalization):
+    model = BreakHisClassifier(pretrained=False)
+    path = tmp_path / f"binary_{stain_normalization}.pt"
+    save_checkpoint(
+        path,
+        model,
+        optim.Adam(model.parameters()),
+        epoch=0,
+        metrics={"f1": 0.9, "stain_normalization": stain_normalization},
+    )
+    return path
+
+
+class _SpyStainNormalize:
+    calls = 0
+
+    def __call__(self, image):
+        type(self).calls += 1
+        return image
+
+
+@pytest.mark.parametrize("stain_normalization, expected_calls", [("macenko", 1), (None, 0)])
+def test_upload_is_stain_normalized_only_for_a_model_trained_that_way(
+    monkeypatch, tmp_path, stain_normalization, expected_calls
+):
+    checkpoint = _make_binary_checkpoint_with_preprocessing(tmp_path, stain_normalization)
+    get_model.cache_clear()
+    monkeypatch.setattr("src.serving.app.CHECKPOINT_PATH", str(checkpoint))
+    monkeypatch.setattr("src.serving.app.SUBTYPE_CHECKPOINT_PATH", "nonexistent_subtype.pt")
+    _SpyStainNormalize.calls = 0
+    monkeypatch.setattr("src.serving.app.StainNormalize", _SpyStainNormalize)
+
+    resp = client.post(
+        "/predict",
+        files={"file": ("sample.png", _fake_histology_bytes(), "image/png")},
+        data={"magnification": "40"},
+    )
+
+    assert resp.status_code == 200
+    assert _SpyStainNormalize.calls == expected_calls
+
+
+def test_model_needing_unknown_preprocessing_is_refused_not_guessed(monkeypatch, tmp_path):
+    checkpoint = _make_binary_checkpoint_with_preprocessing(tmp_path, "vahadane")
+    get_model.cache_clear()
+    monkeypatch.setattr("src.serving.app.CHECKPOINT_PATH", str(checkpoint))
+
+    resp = client.post(
+        "/predict",
+        files={"file": ("sample.png", _fake_histology_bytes(), "image/png")},
+        data={"magnification": "40"},
+    )
+
+    assert resp.status_code == 503
+    assert "vahadane" in resp.json()["detail"]
