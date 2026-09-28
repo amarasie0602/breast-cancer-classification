@@ -1,7 +1,15 @@
 import numpy as np
+import pytest
 from PIL import Image
 
-from src.data.stain import HE_REFERENCE, StainNormalize, macenko_normalize
+from src.data.stain import (
+    HE_REFERENCE,
+    STAIN_MARKER_FILE,
+    StainNormalize,
+    dataset_stain_normalization,
+    macenko_normalize,
+    require_stain_normalization,
+)
 
 
 def _render(stains: np.ndarray, background: float = 235.0, seed: int = 0) -> np.ndarray:
@@ -57,3 +65,16 @@ def test_transform_keeps_size_and_mode():
     out = StainNormalize()(image)
     assert out.size == image.size
     assert out.mode == "RGB"
+
+
+def test_raw_dataset_has_no_stain_normalization(tmp_path):
+    assert dataset_stain_normalization(tmp_path) is None
+    require_stain_normalization(tmp_path, None)
+
+
+def test_mismatched_colour_space_is_an_error(tmp_path):
+    (tmp_path / STAIN_MARKER_FILE).write_text("macenko\n")
+    assert dataset_stain_normalization(tmp_path) == "macenko"
+    require_stain_normalization(tmp_path, "macenko")
+    with pytest.raises(ValueError, match="holds macenko images"):
+        require_stain_normalization(tmp_path, None)

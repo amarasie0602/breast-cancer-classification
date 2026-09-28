@@ -13,8 +13,18 @@ the method's widely used reference implementation, so no particular BreakHis
 image (and therefore no particular patient or split) defines the target.
 """
 
+from pathlib import Path
+from typing import Optional, Union
+
 import numpy as np
 from PIL import Image
+
+# Written at the root of a stain-normalized copy of the dataset once every
+# image has been converted; its content names the method. Training and
+# evaluation read it, so a model can't be trained on one colour space and
+# evaluated on another without an error.
+STAIN_MARKER_FILE = "STAIN_NORMALIZATION"
+MACENKO = "macenko"
 
 # Reference H (column 0) and E (column 1) optical-density vectors, and the
 # 99th-percentile concentration of each stain in the reference image.
@@ -88,4 +98,20 @@ class StainNormalize:
         return Image.fromarray(macenko_normalize(np.asarray(image.convert("RGB"))))
 
     def __repr__(self) -> str:
-        return f"{type(self).__name__}(method='macenko')"
+        return f"{type(self).__name__}(method={MACENKO!r})"
+
+
+def dataset_stain_normalization(root: Union[str, Path]) -> Optional[str]:
+    """The stain normalization a dataset copy was built with, or None for raw data."""
+    marker = Path(root) / STAIN_MARKER_FILE
+    return marker.read_text(encoding="utf-8").strip() if marker.is_file() else None
+
+
+def require_stain_normalization(data_root: Union[str, Path], expected: Optional[str]) -> None:
+    """Raise if ``data_root`` isn't in the colour space ``expected`` (None = raw)."""
+    actual = dataset_stain_normalization(data_root)
+    if actual != expected:
+        raise ValueError(
+            f"expected {expected or 'raw (unnormalized)'} images, but {data_root} holds "
+            f"{actual or 'raw (unnormalized)'} images"
+        )
