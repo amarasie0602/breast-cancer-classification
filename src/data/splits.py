@@ -38,7 +38,10 @@ def stratified_patient_split(
     train_patients, val_patients, test_patients = set(), set(), set()
     for patients in patients_by_label.values():
         patients = sorted(patients)
-        rng.shuffle(patients)  # NOSONAR: reproducible split, not a security context
+        # Seeded on purpose: training, evaluation and threshold tuning each
+        # recompute this split and must get the same patients. An unseedable
+        # CSPRNG would put test patients into training. Not a security use.
+        rng.shuffle(patients)  # NOSONAR
         n = len(patients)
         n_train = round(n * ratios[0])
         n_val = round(n * ratios[1])
