@@ -14,7 +14,6 @@ the app keeps serving the previous model.
     python -m scripts.export_serving_checkpoints
 """
 
-import argparse
 from pathlib import Path
 from typing import Union
 
@@ -31,6 +30,12 @@ CHECKPOINT_NAMES = (
     "best_subtype.pt",
 )
 
+# Fixed rather than taken from the command line: the only job of this script
+# is refreshing the directory the app and the image serve from.
+REPO_ROOT = Path(__file__).resolve().parent.parent
+SOURCE_DIR = REPO_ROOT / "checkpoints"
+OUTPUT_DIR = REPO_ROOT / "serving_checkpoints"
+
 # Everything load_checkpoint() reads, minus the optimizer state.
 SERVING_KEYS = ("epoch", "model_state", "metrics")
 
@@ -45,14 +50,9 @@ def export_serving_checkpoint(source: Union[str, Path], destination: Union[str, 
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--source-dir", default="checkpoints")
-    parser.add_argument("--output-dir", default="serving_checkpoints")
-    args = parser.parse_args()
-
     for name in CHECKPOINT_NAMES:
-        source = Path(args.source_dir) / name
-        destination = Path(args.output_dir) / name
+        source = SOURCE_DIR / name
+        destination = OUTPUT_DIR / name
         export_serving_checkpoint(source, destination)
         print(
             f"  {name}: {source.stat().st_size / 1e6:.0f}MB -> "
