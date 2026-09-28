@@ -10,6 +10,7 @@ from torch.utils.data import DataLoader, WeightedRandomSampler
 
 from src.data.dataset import BreakHisDataset
 from src.data.splits import filter_samples_by_patients, stratified_patient_split
+from src.data.stain import require_stain_normalization
 from src.data.transforms import eval_transform, train_transform
 from src.models.classifier import BreakHisClassifier
 from src.training.checkpoint import save_checkpoint
@@ -89,6 +90,12 @@ def run_training(
 ) -> float:
     import mlflow
 
+    # Normalization happens once, when the dataset copy is built
+    # (scripts/normalize_dataset.py); the config says which copy this run is
+    # meant for, and a mismatch is an error rather than a silently wrong model.
+    stain_normalization = config.get("stain_normalization")
+    require_stain_normalization(data_root, stain_normalization)
+
     train_loader, val_loader = build_dataloaders(
         data_root,
         magnification,
@@ -122,6 +129,7 @@ def run_training(
                 "learning_rate": config["learning_rate"],
                 "batch_size": config["batch_size"],
                 "weight_decay": config["weight_decay"],
+                "stain_normalization": stain_normalization or "none",
             }
         )
 
@@ -147,7 +155,11 @@ def run_training(
                     model,
                     optimizer,
                     epoch,
-                    val_metrics,
+                    # Recorded so evaluation and serving can apply the same
+                    # preprocessing the model was trained with.
+                    {**val_metrics, "stain_normalization": stain_normalization}
+                    if stain_normalization
+                    else val_metrics,
                 )
 
             if early_stopping.step(val_metrics["loss"]):
