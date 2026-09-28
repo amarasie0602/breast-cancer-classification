@@ -13,6 +13,7 @@ Run by the CD workflow after the image is pushed:
 
 import argparse
 import os
+import re
 import shutil
 import tempfile
 from pathlib import Path
@@ -20,11 +21,26 @@ from typing import Union
 
 SPACE_SOURCE_DIR = Path(__file__).resolve().parent.parent / "deploy" / "huggingface"
 
+# A lowercase repository path plus a required tag, and nothing else. The value
+# is written into the Space's Dockerfile, so anything looser (whitespace, a
+# newline) could smuggle extra Dockerfile instructions into the deployed app.
+_TAGGED_IMAGE = re.compile(r"[a-z0-9]+(?:[._/-][a-z0-9]+)*:[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}")
+
+
+def validated_image(image: str) -> str:
+    """Return ``image`` if it is a plain, tagged image reference; raise otherwise."""
+    match = _TAGGED_IMAGE.fullmatch(image)
+    if match is None:
+        raise ValueError(
+            f"image {image!r} is not a tagged image reference like registry/owner/name:tag; "
+            "deploy a pinned tag, not an implicit :latest"
+        )
+    return match.group(0)
+
 
 def render_space_files(image: str, out_dir: Union[str, Path]) -> None:
     """Write the Space's README (card + metadata) and a Dockerfile built on ``image``."""
-    if ":" not in image.rsplit("/", 1)[-1]:
-        raise ValueError(f"image {image!r} has no tag; deploy a pinned tag, not an implicit :latest")
+    image = validated_image(image)
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     shutil.copy(SPACE_SOURCE_DIR / "README.md", out_dir / "README.md")

