@@ -1,12 +1,13 @@
 """Load a trained checkpoint for inference, cached across requests."""
 
 from functools import lru_cache
+from typing import Optional
 
 import torch
 
 from src.data.dataset import DEFAULT_SUBTYPE_SCHEME, SUBTYPE_SCHEMES
 from src.models.classifier import BreakHisClassifier, MalignantSubtypeClassifier
-from src.training.checkpoint import load_checkpoint
+from src.training.checkpoint import checkpoint_stain_normalization, load_checkpoint
 
 
 @lru_cache(maxsize=4)
@@ -59,3 +60,10 @@ def subtype_checkpoint_scheme(checkpoint_path: str) -> str:
     if scheme not in SUBTYPE_SCHEMES:
         raise ValueError(f"checkpoint {checkpoint_path} has unknown label scheme {scheme!r}")
     return scheme
+
+
+@lru_cache(maxsize=8)
+def binary_checkpoint_stain_normalization(checkpoint_path: str) -> Optional[str]:
+    """The stain normalization a binary model was trained with (None = raw
+    images), so serving can prepare an upload the same way."""
+    return checkpoint_stain_normalization(checkpoint_path)
