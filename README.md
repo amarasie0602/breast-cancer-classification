@@ -186,12 +186,29 @@ before merge.
 
 **CD** (`.github/workflows/cd.yml`) builds the serving image and pushes it to
 GitHub Container Registry (`ghcr.io/<owner>/breast-cancer-classification`) on
-merge to `main` — no external account needed. The final deploy step is
-gated on an optional `DEPLOY_HOOK_URL` repository secret; add a deploy-hook
-URL from Render, Railway, or a similar free-tier host to enable automatic
-deployment. Without it, the step is a no-op and the image can still be run
-locally with `docker compose up --build` or `docker run` against the
-pushed ghcr.io image.
+merge to `main` — no external account needed. The image can always be run
+locally with `docker compose up --build` or `docker run` against it.
+
+### Hosted demo (Hugging Face Spaces)
+
+CD then points a Hugging Face Docker Space at the image it just pushed
+(`scripts/deploy_space.py`, pinned to the commit's tag). Spaces' free CPU
+tier has 16GB of RAM; the app needs ~560MB with one model loaded and ~875MB
+with all four, which rules out 512MB free tiers such as Render's. To enable
+it, once:
+
+1. Create a free account at huggingface.co and an access token with
+   **write** permission (Settings → Access Tokens).
+2. In this GitHub repo, Settings → Secrets and variables → Actions:
+   - add a **secret** `HF_TOKEN` with that token;
+   - add a **variable** `HF_SPACE` set to `<hf-username>/breast-cancer-classification`.
+3. Re-run the latest CD workflow on `main`. The first deploy creates the
+   Space; the build takes a few minutes, after which the app is at
+   `https://huggingface.co/spaces/<hf-username>/breast-cancer-classification`.
+
+Until both are set, the job logs that it skipped and passes. A generic
+`DEPLOY_HOOK_URL` secret (Render, Railway, ...) is still supported by the
+`deploy` job for hosts with enough memory.
 
 ## Limitations
 
