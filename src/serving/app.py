@@ -4,7 +4,7 @@ import base64
 import io
 import os
 from pathlib import Path
-from typing import Dict
+from typing import Annotated, Dict
 
 import torch
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
@@ -144,9 +144,17 @@ def _classify_subtype(tensor):
     return name, SUBTYPE_SCHEMES[scheme]["display"][name], float(probs[idx].item())
 
 
-@app.post("/predict", response_model=PredictionResponse)
+@app.post(
+    "/predict",
+    responses={
+        400: {"description": "Unsupported magnification, or the file is not an image"},
+        422: {"description": "Not a breast histology image (stage 1 rejected it)"},
+        503: {"description": "No model checkpoint is available to serve"},
+    },
+)
 async def predict(
-    file: UploadFile = File(...), magnification: str = Form("40")
+    file: Annotated[UploadFile, File()],
+    magnification: Annotated[str, Form()] = "40",
 ) -> PredictionResponse:
     if magnification not in ALLOWED_MAGNIFICATIONS:
         raise HTTPException(
