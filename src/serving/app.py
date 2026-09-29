@@ -19,6 +19,7 @@ from src.explainability.overlay import cam_to_overlay
 from src.serving.input_guard import looks_like_histology
 from src.serving.logging_middleware import RequestLoggingMiddleware
 from src.serving.metrics import get_prediction_distribution, record_prediction
+from src.serving.ood import load_histology_screen
 from src.serving.model_loader import (
     binary_checkpoint_stain_normalization,
     get_model,
@@ -46,6 +47,11 @@ CHECKPOINT_PATH = os.environ.get("CHECKPOINT_PATH", "serving_checkpoints/best_ma
 # 40x checkpoint).
 CHECKPOINT_DIR = Path(os.environ.get("CHECKPOINT_DIR", "serving_checkpoints"))
 ALLOWED_MAGNIFICATIONS = ("40", "100", "200", "400")
+# Stage 1's second check (src/serving/ood.py): skipped if it hasn't been
+# fitted, so the app still runs without it.
+HISTOLOGY_SCREEN_PATH = os.environ.get(
+    "HISTOLOGY_SCREEN_PATH", "serving_checkpoints/histology_screen.pt"
+)
 SUBTYPE_CHECKPOINT_PATH = os.environ.get(
     "SUBTYPE_CHECKPOINT_PATH", "serving_checkpoints/best_subtype.pt"
 )
@@ -117,6 +123,15 @@ def _decode_image(image_bytes: bytes) -> Image.Image:
         raise HTTPException(status_code=400, detail="Image is too large") from e
     except (UnidentifiedImageError, OSError, SyntaxError, ValueError) as e:
         raise HTTPException(status_code=400, detail="File is not a valid image") from e
+
+
+def _is_histology(image: Image.Image) -> bool:
+    """Stage 1: the cheap colour-and-texture screen, then (only if that passes)
+    the check that the image resembles the training slides at all."""
+    if not looks_like_histology(image):
+        return False
+    screen = load_histology_screen(HISTOLOGY_SCREEN_PATH)
+    return screen is None or not screen.is_unfamiliar(image)
 
 
 def _binary_checkpoint_for(magnification: str):
@@ -202,7 +217,7 @@ async def predict(
     if not os.path.exists(checkpoint_path):
         raise HTTPException(status_code=503, detail="Model checkpoint not available")
 
-    if not looks_like_histology(image):
+    if not _is_histology(image):
         raise HTTPException(
             status_code=422,
             detail="Invalid Image — Please upload a valid breast histology image.",

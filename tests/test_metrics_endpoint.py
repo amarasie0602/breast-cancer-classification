@@ -19,6 +19,7 @@ def _isolate_checkpoint_dir(monkeypatch, tmp_path):
     empty = tmp_path / "no_mag_checkpoints"
     empty.mkdir()
     monkeypatch.setattr("src.serving.app.CHECKPOINT_DIR", empty)
+    monkeypatch.setattr("src.serving.app.HISTOLOGY_SCREEN_PATH", str(tmp_path / "no_screen.pt"))
 
 
 def test_health_response_has_latency_header():
