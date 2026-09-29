@@ -175,6 +175,7 @@
     background: var(--panel); color: var(--text);
   }
   .mag { margin-top: 10px; }
+  .mag .hint { display: block; margin-top: 5px; font-size: 0.72rem; line-height: 1.35; color: var(--muted); }
 
   button.analyze {
     width: 100%;
@@ -401,12 +402,13 @@
 
         <div class="mag">
           <label class="field" for="magnification">Magnification</label>
-          <select id="magnification" name="magnification">
+          <select id="magnification" name="magnification" aria-describedby="magnification-hint">
             <option value="40">40× — low power</option>
             <option value="100">100×</option>
             <option value="200">200×</option>
             <option value="400">400× — high power</option>
           </select>
+          <span class="hint" id="magnification-hint">Choose the zoom the image was captured at. Each magnification has its own model; a result from the wrong one isn't meaningful.</span>
         </div>
 
         <button type="submit" class="analyze" id="submit-btn" disabled>Analyse specimen</button>
