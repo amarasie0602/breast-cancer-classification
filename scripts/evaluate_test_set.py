@@ -24,7 +24,7 @@ from src.serving.model_loader import subtype_checkpoint_scheme
 from src.training.checkpoint import checkpoint_stain_normalization, load_checkpoint
 from src.training.loop import evaluate as evaluate_binary
 from src.training.subtype_loop import evaluate as evaluate_subtype
-from src.training.train import NUM_WORKERS, load_config
+from src.training.train import NUM_WORKERS, load_config, within_project
 
 BINARY_CLASS_NAMES = ("benign", "malignant")
 
@@ -141,14 +141,15 @@ def main() -> None:
     r = data_config["split_ratios"]
     ratios = (r["train"], r["val"], r["test"])
     seed = data_config["seed"]
+    data_root = within_project(args.data_root, "data root")
 
     if args.subtype:
         checkpoint = args.checkpoint or "checkpoints/best_subtype.pt"
-        evaluate_subtype_checkpoint(checkpoint, args.data_root, ratios, seed, args.batch_size)
+        evaluate_subtype_checkpoint(checkpoint, data_root, ratios, seed, args.batch_size)
     else:
         checkpoint = args.checkpoint or f"checkpoints/best_mag{args.magnification}.pt"
         evaluate_binary_checkpoint(
-            checkpoint, args.data_root, args.magnification, ratios, seed, args.batch_size
+            checkpoint, data_root, args.magnification, ratios, seed, args.batch_size
         )
 
 

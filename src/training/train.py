@@ -23,12 +23,26 @@ from src.training.loop import evaluate, train_one_epoch
 NUM_WORKERS = 0
 
 
-def load_config(path: Union[str, Path]) -> dict:
+def within_project(path: Union[str, Path], what: str) -> Path:
+    """Resolve a command-line path, refusing anything outside the project
+    directory (the current working directory)."""
     resolved = Path(path).resolve()
     if not resolved.is_relative_to(Path.cwd()):
-        raise ValueError(f"config path must be within the project directory: {path}")
-    with open(resolved) as f:
+        raise ValueError(f"{what} must be within the project directory: {path}")
+    return resolved
+
+
+def load_config(path: Union[str, Path]) -> dict:
+    with open(within_project(path, "config path")) as f:
         return yaml.safe_load(f)
+
+
+def _checkpoint_metrics(val_metrics: dict, stain_normalization) -> dict:
+    """Validation metrics plus the preprocessing, recorded so evaluation and
+    serving can prepare images the way the model was trained on them."""
+    if not stain_normalization:
+        return val_metrics
+    return {**val_metrics, "stain_normalization": stain_normalization}
 
 
 def build_dataloaders(
@@ -155,11 +169,7 @@ def run_training(
                     model,
                     optimizer,
                     epoch,
-                    # Recorded so evaluation and serving can apply the same
-                    # preprocessing the model was trained with.
-                    {**val_metrics, "stain_normalization": stain_normalization}
-                    if stain_normalization
-                    else val_metrics,
+                    _checkpoint_metrics(val_metrics, stain_normalization),
                 )
 
             if early_stopping.step(val_metrics["loss"]):
@@ -188,7 +198,7 @@ def main() -> None:
 
     run_training(
         train_config,
-        args.data_root,
+        within_project(args.data_root, "data root"),
         args.magnification,
         split_ratios=(ratios["train"], ratios["val"], ratios["test"]),
         seed=data_config["seed"],

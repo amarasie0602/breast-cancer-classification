@@ -2,7 +2,7 @@ import pytest
 
 from src.data.stain import STAIN_MARKER_FILE
 from src.training.checkpoint import checkpoint_stain_normalization
-from src.training.train import load_config, run_training
+from src.training.train import load_config, run_training, within_project
 
 
 def test_load_config_reads_yaml_within_cwd(tmp_path, monkeypatch):
@@ -105,11 +105,9 @@ def test_run_training_refuses_normalized_data_for_a_raw_config(
     breakhis_root_multi_patient, tmp_path
 ):
     (breakhis_root_multi_patient / STAIN_MARKER_FILE).write_text("macenko\n")
+    config = _tiny_config(tmp_path)
     with pytest.raises(ValueError, match="holds macenko images"):
-        run_training(
-            _tiny_config(tmp_path), breakhis_root_multi_patient, "40", (0.5, 0.25, 0.25),
-            pretrained=False,
-        )
+        run_training(config, breakhis_root_multi_patient, "40", (0.5, 0.25, 0.25), pretrained=False)
 
 
 def test_stain_normalized_checkpoint_records_its_preprocessing(
@@ -131,3 +129,13 @@ def test_stain_normalized_checkpoint_records_its_preprocessing(
 
     checkpoint = tmp_path / "checkpoints" / "best_mag40.pt"
     assert checkpoint_stain_normalization(checkpoint) == "macenko"
+
+
+def test_data_root_from_the_command_line_must_be_inside_the_project(tmp_path, monkeypatch):
+    project = tmp_path / "project"
+    (project / "data").mkdir(parents=True)
+    monkeypatch.chdir(project)
+
+    assert within_project("data", "data root") == (project / "data").resolve()
+    with pytest.raises(ValueError, match="data root must be within the project directory"):
+        within_project(tmp_path / "elsewhere", "data root")
