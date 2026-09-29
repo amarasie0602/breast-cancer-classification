@@ -15,13 +15,16 @@ H&E slides reliably have and most non-histology images don't:
   2. Enough local texture to be a real tissue image rather than a flat or
      near-flat image.
 
-Thresholds were picked empirically against 60 random real BreakHis samples
-across all magnifications/subtypes (worst case: hue fraction 0.026, texture
-8.03) with generous margin below those observed minimums, and against a set
-of representative non-histology images (photos, solid colors, cartoons).
-It will not catch everything -- e.g. synthetic random noise can spuriously
-pass -- that tradeoff is intentional: a heuristic this cheap cannot be a
-real OOD detector, only a screen for the common, honest-mistake cases.
+Thresholds are calibrated on all 6,836 training and validation images, every
+magnification and subtype, and none of them fails: the faintest slide has
+2.46% stain-coloured pixels counting from saturation 0.05, and the smoothest
+has texture 2.68. (The first thresholds came from 60 samples; with a 0.12
+saturation cutoff they rejected 1.5% of real slides, the faintly stained
+ones.) The held-out test images were not used to choose them.
+
+It will not catch everything -- purple-heavy photos and random noise can
+pass. A heuristic this cheap is a screen for the common, honest-mistake
+cases, not a real out-of-distribution detector.
 """
 
 import numpy as np
@@ -29,9 +32,9 @@ from PIL import Image
 
 _HUE_MIN = 250.0
 _HUE_MAX = 350.0
-_MIN_SATURATION = 0.12
+_MIN_SATURATION = 0.05
 _MIN_HUE_FRACTION = 0.02
-_MIN_TEXTURE = 3.0
+_MIN_TEXTURE = 2.5
 
 
 def looks_like_histology(image: Image.Image) -> bool:

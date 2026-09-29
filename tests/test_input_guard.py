@@ -30,3 +30,10 @@ def test_rejects_textured_but_wrong_hue_image():
 def test_rejects_black_and_white_image():
     assert looks_like_histology(Image.new("RGB", (64, 64), color=(0, 0, 0))) is False
     assert looks_like_histology(Image.new("RGB", (64, 64), color=(255, 255, 255))) is False
+
+
+def test_accepts_faintly_stained_tissue():
+    # Pale lilac with fine texture, like the faint BreakHis slides the first
+    # thresholds (saturation > 0.12) rejected as "not histology".
+    image = _noisy_image((220, 208, 224), std=5)
+    assert looks_like_histology(image) is True
