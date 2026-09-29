@@ -51,6 +51,13 @@ SUBTYPE_CHECKPOINT_PATH = os.environ.get(
 )
 STATIC_DIR = Path(__file__).parent / "static"
 
+# BreakHis images are 700x460 (0.3 megapixels). Much larger uploads are refused
+# before decoding: Pillow only warns below ~179M pixels, and decoding an image
+# that size allocates gigabytes. The byte limit stops an oversized upload from
+# being read into memory at all.
+MAX_UPLOAD_BYTES = int(os.environ.get("MAX_UPLOAD_BYTES", str(20 * 1024 * 1024)))
+MAX_IMAGE_PIXELS = 40_000_000
+
 # Operating point for benign/malignant. 0.5 is where sigmoid happens to
 # cross, not a chosen threshold: at 0.5 this model runs at sensitivity
 # 0.88-0.99 but specificity 0.46-0.73 (see docs/model_card.md). Raising it
@@ -92,6 +99,24 @@ def health() -> Dict[str, str]:
 @app.get("/metrics")
 def metrics() -> Dict[str, Dict[str, int]]:
     return {"prediction_distribution": get_prediction_distribution()}
+
+
+def _decode_image(image_bytes: bytes) -> Image.Image:
+    """Decode an upload to RGB, turning every way it can be unreadable into a 400."""
+    try:
+        image = Image.open(io.BytesIO(image_bytes))
+        if image.width * image.height > MAX_IMAGE_PIXELS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Image is too large ({image.width}x{image.height} pixels)",
+            )
+        # Image.open only reads the header; a truncated or corrupt body only
+        # fails here, when the pixels are actually decoded.
+        return image.convert("RGB")
+    except Image.DecompressionBombError as e:
+        raise HTTPException(status_code=400, detail="Image is too large") from e
+    except (UnidentifiedImageError, OSError, SyntaxError, ValueError) as e:
+        raise HTTPException(status_code=400, detail="File is not a valid image") from e
 
 
 def _binary_checkpoint_for(magnification: str):
@@ -149,7 +174,8 @@ def _classify_subtype(tensor):
 @app.post(
     "/predict",
     responses={
-        400: {"description": "Unsupported magnification, or the file is not an image"},
+        400: {"description": "Unsupported magnification, or the file is not a usable image"},
+        413: {"description": "The upload is larger than MAX_UPLOAD_BYTES"},
         422: {"description": "Not a breast histology image (stage 1 rejected it)"},
         503: {"description": "No usable model checkpoint is available to serve"},
     },
@@ -164,11 +190,13 @@ async def predict(
             detail=f"magnification must be one of {', '.join(ALLOWED_MAGNIFICATIONS)}",
         )
 
-    image_bytes = await file.read()
-    try:
-        image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-    except UnidentifiedImageError as e:
-        raise HTTPException(status_code=400, detail="File is not a valid image") from e
+    image_bytes = await file.read(MAX_UPLOAD_BYTES + 1)
+    if len(image_bytes) > MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File is larger than {MAX_UPLOAD_BYTES // (1024 * 1024)} MB",
+        )
+    image = _decode_image(image_bytes)
 
     checkpoint_path, model_magnification = _binary_checkpoint_for(magnification)
     if not os.path.exists(checkpoint_path):

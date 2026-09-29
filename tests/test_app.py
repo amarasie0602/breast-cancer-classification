@@ -445,3 +445,50 @@ def test_model_needing_unknown_preprocessing_is_refused_not_guessed(monkeypatch,
 
     assert resp.status_code == 503
     assert "vahadane" in resp.json()["detail"]
+
+
+def _post_image(content, magnification: str = "40"):
+    return client.post(
+        "/predict",
+        files={"file": ("upload.png", content, "image/png")},
+        data={"magnification": magnification},
+    )
+
+
+def test_truncated_image_is_a_400_not_a_500(monkeypatch, tmp_path):
+    # Image.open only reads the header, so a cut-off file used to fail later,
+    # during decoding, with an error nothing caught.
+    monkeypatch.setattr("src.serving.app.CHECKPOINT_PATH", str(tmp_path / "unused.pt"))
+    truncated = _fake_histology_bytes().getvalue()[:400]
+
+    resp = _post_image(truncated)
+
+    assert resp.status_code == 400
+    assert resp.json()["detail"] == "File is not a valid image"
+
+
+def test_image_over_the_pixel_limit_is_refused_before_decoding(monkeypatch):
+    monkeypatch.setattr("src.serving.app.MAX_IMAGE_PIXELS", 1000)
+
+    resp = _post_image(_fake_histology_bytes())
+
+    assert resp.status_code == 400
+    assert "too large" in resp.json()["detail"]
+
+
+def test_decompression_bomb_is_a_400_not_a_500(monkeypatch):
+    # Pillow itself refuses images above twice its MAX_IMAGE_PIXELS at open().
+    monkeypatch.setattr("PIL.Image.MAX_IMAGE_PIXELS", 100)
+
+    resp = _post_image(_fake_histology_bytes())
+
+    assert resp.status_code == 400
+    assert resp.json()["detail"] == "Image is too large"
+
+
+def test_upload_over_the_size_limit_is_a_413(monkeypatch):
+    monkeypatch.setattr("src.serving.app.MAX_UPLOAD_BYTES", 100)
+
+    resp = _post_image(_fake_histology_bytes())
+
+    assert resp.status_code == 413
