@@ -4,11 +4,11 @@ from PIL import Image
 
 from src.data.stain import (
     HE_REFERENCE,
-    STAIN_MARKER_FILE,
     StainNormalize,
     dataset_stain_normalization,
     macenko_normalize,
     require_stain_normalization,
+    stain_marker_name,
 )
 
 
@@ -73,8 +73,13 @@ def test_raw_dataset_has_no_stain_normalization(tmp_path):
 
 
 def test_mismatched_colour_space_is_an_error(tmp_path):
-    (tmp_path / STAIN_MARKER_FILE).write_text("macenko\n")
+    (tmp_path / stain_marker_name("macenko")).touch()
     assert dataset_stain_normalization(tmp_path) == "macenko"
     require_stain_normalization(tmp_path, "macenko")
     with pytest.raises(ValueError, match="holds macenko images"):
         require_stain_normalization(tmp_path, None)
+
+
+def test_unknown_method_marker_is_not_trusted(tmp_path):
+    (tmp_path / stain_marker_name("vahadane")).touch()
+    assert dataset_stain_normalization(tmp_path) is None
