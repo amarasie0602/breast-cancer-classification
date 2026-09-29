@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from src.serving.ood import FeatureDistance, feature_distance_for, stats_path_for
+from src.serving.ood import FeatureDistance, HistologyScreen, load_histology_screen, stats_path_for
 
 
 def _training_features(n=400, d=32, seed=0):
@@ -49,7 +49,37 @@ def test_round_trips_through_its_file(tmp_path):
     np.testing.assert_allclose(loaded.score(train[:20]), check.score(train[:20]), rtol=1e-4)
 
 
-def test_stats_live_beside_their_checkpoint(tmp_path):
-    checkpoint = tmp_path / "best_mag200.pt"
-    assert stats_path_for(checkpoint) == tmp_path / "best_mag200.ood.npz"
-    assert feature_distance_for(str(checkpoint)) is None  # nothing fitted yet
+def test_stats_live_beside_their_weights(tmp_path):
+    weights = tmp_path / "histology_screen.pt"
+    assert stats_path_for(weights) == tmp_path / "histology_screen.ood.npz"
+
+
+def test_screen_is_skipped_when_not_fitted_or_unreadable(tmp_path):
+    weights = tmp_path / "histology_screen.pt"
+    assert load_histology_screen(str(weights)) is None  # nothing fitted
+
+    weights.write_text("version https://git-lfs.github.com/spec/v1\noid sha256:abc\n")
+    FeatureDistance.fit(_training_features(), n_components=4).save(stats_path_for(weights))
+    assert load_histology_screen(str(weights)) is None  # an LFS pointer, not weights
+
+
+def test_screen_flags_what_its_distance_says_is_unfamiliar():
+    from PIL import Image
+    from torch import nn
+
+    class MeanColour(nn.Module):  # a stand-in network: features = mean RGB
+        def forward(self, x):
+            return x.mean(dim=(2, 3))
+
+    screen = HistologyScreen(MeanColour())
+    rng = np.random.default_rng(0)
+    slides = [
+        Image.fromarray(np.full((32, 32, 3), (180 + rng.integers(-8, 8), 100, 170), np.uint8))
+        for _ in range(60)
+    ]
+    distance = FeatureDistance.fit(screen.features(slides), n_components=2)
+    familiar = distance.score(screen.features(slides))
+    screen.distance = distance.with_threshold(float(familiar.max()) * 1.5)
+
+    assert not screen.is_unfamiliar(slides[0])
+    assert screen.is_unfamiliar(Image.new("RGB", (32, 32), (20, 200, 40)))

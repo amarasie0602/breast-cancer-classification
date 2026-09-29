@@ -1,28 +1,38 @@
 """Feature-distance check: is this image like the slides the model was trained on?
 
-Stage 1's colour-and-texture screen (input_guard.py) catches most photos, but
-anything purple and textured enough gets through, and the classifier then
-calls it benign or malignant with full confidence. This check looks at the
-image the way the model does instead: the 2048-number feature vector ResNet50
-computes just before its final layer. Training slides' vectors occupy a
-compact region; photos, screenshots and noise land far outside it.
+Stage 1's colour-and-texture screen (input_guard.py) lets through anything
+purple and textured enough, and the classifier then calls it benign or
+malignant with full confidence. This second check describes the image with a
+general-purpose ImageNet EfficientNet-B0 and asks how far that description is
+from the training slides'.
+
+It deliberately doesn't use the cancer models' own features: fine-tuned only
+on histology, they place wallpapers and screenshots right among the slides.
+A network that still knows photos from slides separates them.
 
 "Far" is measured with probabilistic PCA fitted on the training slides'
-vectors: a Mahalanobis distance within the top principal directions, plus the
+features: a Mahalanobis distance within the top principal directions, plus the
 leftover distance outside them scaled by the average leftover variance. The
-threshold is set on validation slides, which the statistics weren't fitted
-on (scripts/fit_ood.py).
-
-The statistics are stored next to the model they describe (best_mag200.pt ->
-best_mag200.ood.npz), since they are only valid for that model's features.
+threshold is set on validation slides (scripts/fit_histology_screen.py).
+Statistics are stored beside the weights they describe
+(histology_screen.pt -> histology_screen.ood.npz).
 """
 
+import logging
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Optional, Union
+from typing import List, Optional, Union
 
 import numpy as np
+import torch
+from PIL import Image
+from torch import nn
+from torchvision.models import efficientnet_b0
+
+from src.data.transforms import eval_transform
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -85,13 +95,43 @@ class FeatureDistance:
             )
 
 
-def stats_path_for(checkpoint_path: Union[str, Path]) -> Path:
-    """best_mag200.pt -> best_mag200.ood.npz, beside the model it describes."""
-    return Path(checkpoint_path).with_suffix(".ood.npz")
+def stats_path_for(weights_path: Union[str, Path]) -> Path:
+    """histology_screen.pt -> histology_screen.ood.npz, beside the weights."""
+    return Path(weights_path).with_suffix(".ood.npz")
 
 
-@lru_cache(maxsize=8)
-def feature_distance_for(checkpoint_path: str) -> Optional[FeatureDistance]:
-    """The fitted check for a checkpoint, or None if none has been fitted."""
-    path = stats_path_for(checkpoint_path)
-    return FeatureDistance.load(path) if path.is_file() else None
+class HistologyScreen:
+    """A feature extractor plus the fitted distance that decides what's familiar."""
+
+    def __init__(self, network: nn.Module, distance: Optional[FeatureDistance] = None):
+        self.network = network.eval()
+        self.distance = distance
+        self._transform = eval_transform()
+
+    @classmethod
+    def load(cls, weights_path: Union[str, Path]) -> "HistologyScreen":
+        network = efficientnet_b0(weights=None)
+        network.classifier = nn.Identity()
+        network.load_state_dict(torch.load(weights_path, map_location="cpu", weights_only=True))
+        return cls(network, FeatureDistance.load(stats_path_for(weights_path)))
+
+    def features(self, images: List[Image.Image]) -> np.ndarray:
+        with torch.no_grad():
+            batch = torch.stack([self._transform(image.convert("RGB")) for image in images])
+            return self.network(batch).numpy()
+
+    def is_unfamiliar(self, image: Image.Image) -> bool:
+        return self.distance.is_unfamiliar(self.features([image]))
+
+
+@lru_cache(maxsize=2)
+def load_histology_screen(weights_path: str) -> Optional[HistologyScreen]:
+    """The fitted screen, or None if it hasn't been fitted or can't be read
+    (e.g. a Git LFS pointer in a checkout without LFS)."""
+    if not (Path(weights_path).is_file() and stats_path_for(weights_path).is_file()):
+        return None
+    try:
+        return HistologyScreen.load(weights_path)
+    except Exception:  # noqa: BLE001 - any unreadable file means the same thing here
+        logger.warning("histology screen at %s could not be loaded; skipping it", weights_path)
+        return None
