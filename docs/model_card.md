@@ -348,6 +348,32 @@ either difference is also within sampling noise; the honest summary is that
 balancing moves the model along the sensitivity/specificity trade-off rather
 than improving it.
 
+### Stain normalization was tried, and not adopted
+
+With ~60 training patients per magnification, a patient's slide colour could
+stand in for its label, so all four models were retrained on Macenko
+stain-normalized images (`src/data/stain.py`, `configs/train_stain_macenko.yaml`):
+same hyperparameters, same patient split, only the colour space changed. The
+rule for adopting a model was fixed before any result was seen: higher test
+specificity, with sensitivity no more than one percentage point lower.
+
+| Test set | Specificity: original → normalized | Sensitivity: original → normalized | False alarms | Missed cancers |
+| --- | --- | --- | --- | --- |
+| 40x  | **0.544** → 0.367 | **0.974** → 0.942 | 36 → 50 of 79 | 5 → 11 of 191 |
+| 100x | **0.575** → 0.475 | 0.882 → **0.902** | 34 → 42 of 80 | 24 → 20 of 204 |
+| 200x | **0.732** → 0.549 | **0.990** → 0.857 | 19 → 32 of 71 | 2 → 30 of 210 |
+| 400x | **0.461** → 0.342 | **0.988** → 0.957 | 41 → 50 of 76 | 2 → 7 of 162 |
+
+Specificity fell at every magnification, so none was adopted and the served
+models are unchanged. Validation agreed (F1 0.83-0.88 against 0.91-0.94), and
+it isn't only a short run: the 100x and 200x models trained as many epochs as
+the originals. The likeliest reading is that stain colour carries real
+diagnostic signal in BreakHis rather than only a patient shortcut, and
+re-rendering every image with one reference stain removes some of it; the
+original models' colour-jitter augmentation already covers moderate stain
+variation. Serving supports normalized models (a checkpoint records its
+preprocessing), so a future variant can be dropped in if one ever passes.
+
 ### Validation flatters these models relative to test
 
 Specificity at threshold 0.5 is 0.81-0.96 on validation but 0.46-0.73 on

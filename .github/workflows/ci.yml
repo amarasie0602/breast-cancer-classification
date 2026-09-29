@@ -50,10 +50,12 @@ jobs:
           python-version: "3.11"
           cache: "pip"
       - run: "pip install --require-hashes --only-binary :all: --no-binary antlr4-python3-runtime -r requirements.lock.txt"
-      - run: python scripts/make_smoke_dataset.py --root /tmp/smoke_data
+      # Inside the workspace: the training CLI only accepts a data root within
+      # the project directory.
+      - run: python scripts/make_smoke_dataset.py --root smoke_data
       - run: |
           python -m src.training.train \
-            --data-root /tmp/smoke_data \
+            --data-root smoke_data \
             --magnification 40 \
             --train-config configs/train_smoke.yaml \
             --data-config configs/data.yaml \
@@ -61,7 +63,7 @@ jobs:
             --no-pretrained
       - run: |
           python -m src.training.train_subtype \
-            --data-root /tmp/smoke_data \
+            --data-root smoke_data \
             --train-config configs/train_subtype_smoke.yaml \
             --data-config configs/data.yaml \
             --mlflow-tracking-uri sqlite:////tmp/smoke_mlflow.db \

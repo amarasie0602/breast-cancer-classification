@@ -32,3 +32,9 @@ def load_checkpoint(
     if optimizer is not None:
         optimizer.load_state_dict(checkpoint["optimizer_state"])
     return checkpoint["epoch"], checkpoint["metrics"]
+
+
+def checkpoint_stain_normalization(path: Union[str, Path]) -> Optional[str]:
+    """The stain normalization a checkpoint was trained with, or None for raw images."""
+    checkpoint = torch.load(path, map_location="cpu", weights_only=True)
+    return (checkpoint.get("metrics") or {}).get("stain_normalization")

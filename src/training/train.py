@@ -10,6 +10,7 @@ from torch.utils.data import DataLoader, WeightedRandomSampler
 
 from src.data.dataset import BreakHisDataset
 from src.data.splits import filter_samples_by_patients, stratified_patient_split
+from src.data.stain import require_stain_normalization
 from src.data.transforms import eval_transform, train_transform
 from src.models.classifier import BreakHisClassifier
 from src.training.checkpoint import save_checkpoint
@@ -22,12 +23,26 @@ from src.training.loop import evaluate, train_one_epoch
 NUM_WORKERS = 0
 
 
-def load_config(path: Union[str, Path]) -> dict:
+def within_project(path: Union[str, Path], what: str) -> Path:
+    """Resolve a command-line path, refusing anything outside the project
+    directory (the current working directory)."""
     resolved = Path(path).resolve()
     if not resolved.is_relative_to(Path.cwd()):
-        raise ValueError(f"config path must be within the project directory: {path}")
-    with open(resolved) as f:
+        raise ValueError(f"{what} must be within the project directory: {path}")
+    return resolved
+
+
+def load_config(path: Union[str, Path]) -> dict:
+    with open(within_project(path, "config path")) as f:
         return yaml.safe_load(f)
+
+
+def _checkpoint_metrics(val_metrics: dict, stain_normalization) -> dict:
+    """Validation metrics plus the preprocessing, recorded so evaluation and
+    serving can prepare images the way the model was trained on them."""
+    if not stain_normalization:
+        return val_metrics
+    return {**val_metrics, "stain_normalization": stain_normalization}
 
 
 def build_dataloaders(
@@ -89,6 +104,12 @@ def run_training(
 ) -> float:
     import mlflow
 
+    # Normalization happens once, when the dataset copy is built
+    # (scripts/normalize_dataset.py); the config says which copy this run is
+    # meant for, and a mismatch is an error rather than a silently wrong model.
+    stain_normalization = config.get("stain_normalization")
+    require_stain_normalization(data_root, stain_normalization)
+
     train_loader, val_loader = build_dataloaders(
         data_root,
         magnification,
@@ -122,6 +143,7 @@ def run_training(
                 "learning_rate": config["learning_rate"],
                 "batch_size": config["batch_size"],
                 "weight_decay": config["weight_decay"],
+                "stain_normalization": stain_normalization or "none",
             }
         )
 
@@ -147,7 +169,7 @@ def run_training(
                     model,
                     optimizer,
                     epoch,
-                    val_metrics,
+                    _checkpoint_metrics(val_metrics, stain_normalization),
                 )
 
             if early_stopping.step(val_metrics["loss"]):
@@ -176,7 +198,7 @@ def main() -> None:
 
     run_training(
         train_config,
-        args.data_root,
+        within_project(args.data_root, "data root"),
         args.magnification,
         split_ratios=(ratios["train"], ratios["val"], ratios["test"]),
         seed=data_config["seed"],

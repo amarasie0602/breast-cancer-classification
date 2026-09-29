@@ -169,6 +169,12 @@ class, and malignant outnumbers benign about 2:1 in the test set, so a
 model that over-calls cancer is rewarded twice. The bias is the safer
 direction for screening, but it is not "the model works."
 
+Three fixes have been tried against the held-out test set and none adopted:
+tuning the decision threshold, class-balanced retraining (more specificity,
+but 13 more missed cancers at 200x) and Macenko stain normalization
+(specificity *fell* at every magnification). The numbers are in the
+[model card](docs/model_card.md#stain-normalization-was-tried-and-not-adopted).
+
 The per-magnification ranking is also noisy — it flips between validation
 and test, since each split has only 11 test patients. See
 [docs/model_card.md](docs/model_card.md#results) for the confusion

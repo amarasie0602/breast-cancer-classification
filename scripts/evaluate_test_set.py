@@ -17,13 +17,14 @@ from torch.utils.data import DataLoader
 
 from src.data.dataset import SUBTYPE_SCHEMES, BreakHisDataset, BreakHisSubtypeDataset
 from src.data.splits import filter_samples_by_patients, stratified_patient_split
+from src.data.stain import require_stain_normalization
 from src.data.transforms import eval_transform
 from src.models.classifier import BreakHisClassifier, MalignantSubtypeClassifier
 from src.serving.model_loader import subtype_checkpoint_scheme
-from src.training.checkpoint import load_checkpoint
+from src.training.checkpoint import checkpoint_stain_normalization, load_checkpoint
 from src.training.loop import evaluate as evaluate_binary
 from src.training.subtype_loop import evaluate as evaluate_subtype
-from src.training.train import NUM_WORKERS, load_config
+from src.training.train import NUM_WORKERS, load_config, within_project
 
 BINARY_CLASS_NAMES = ("benign", "malignant")
 
@@ -39,6 +40,7 @@ def _print_confusion_matrix(matrix, class_names) -> None:
 
 
 def evaluate_binary_checkpoint(checkpoint_path, data_root, magnification, ratios, seed, batch_size):
+    require_stain_normalization(data_root, checkpoint_stain_normalization(checkpoint_path))
     full_ds = BreakHisDataset(data_root, magnification=magnification)
     _, _, test_patients = stratified_patient_split(full_ds.samples, ratios=ratios, seed=seed)
 
@@ -139,14 +141,15 @@ def main() -> None:
     r = data_config["split_ratios"]
     ratios = (r["train"], r["val"], r["test"])
     seed = data_config["seed"]
+    data_root = within_project(args.data_root, "data root")
 
     if args.subtype:
         checkpoint = args.checkpoint or "checkpoints/best_subtype.pt"
-        evaluate_subtype_checkpoint(checkpoint, args.data_root, ratios, seed, args.batch_size)
+        evaluate_subtype_checkpoint(checkpoint, data_root, ratios, seed, args.batch_size)
     else:
         checkpoint = args.checkpoint or f"checkpoints/best_mag{args.magnification}.pt"
         evaluate_binary_checkpoint(
-            checkpoint, args.data_root, args.magnification, ratios, seed, args.batch_size
+            checkpoint, data_root, args.magnification, ratios, seed, args.batch_size
         )
 
 
