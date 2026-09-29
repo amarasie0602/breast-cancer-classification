@@ -48,10 +48,13 @@ def _images_by_split():
         train, val, test = stratified_patient_split(
             ds.samples, ratios=(r["train"], r["val"], r["test"]), seed=config["seed"]
         )
+        split_of = {
+            **dict.fromkeys(train, "train"),
+            **dict.fromkeys(val, "val"),
+            **dict.fromkeys(test, "test"),
+        }
         for sample in ds.samples:
-            patient = sample["path"].parent.parent.name
-            split = "train" if patient in train else "val" if patient in val else "test"
-            paths[split].append(sample["path"])
+            paths[split_of[sample["path"].parent.parent.name]].append(sample["path"])
     return paths
 
 
