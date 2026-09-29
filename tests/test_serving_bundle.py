@@ -31,3 +31,10 @@ def test_export_script_covers_every_selectable_magnification():
 def test_image_copies_the_whole_serving_directory():
     dockerfile = (REPO_ROOT / "Dockerfile").read_text()
     assert "COPY serving_checkpoints/ serving_checkpoints/" in dockerfile
+
+
+def test_stage_1_feature_screen_ships_with_the_models():
+    # Without these two files serving silently skips the second stage-1 check
+    # and falls back to the colour screen alone.
+    assert (SERVING_DIR / "histology_screen.pt").is_file()
+    assert (SERVING_DIR / "histology_screen.ood.npz").is_file()
