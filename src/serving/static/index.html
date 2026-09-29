@@ -666,14 +666,11 @@
   }
 
   async function errorDetail(resp) {
-    try {
-      const body = await resp.json();
-      // FastAPI's own validation errors carry a list, not a message.
-      return typeof body.detail === "string" ? body.detail : "The request was invalid.";
-    } catch (_) {
-      // Not a JSON body (e.g. a proxy's HTML error page): use the HTTP status text.
-      return resp.statusText || "The request failed.";
-    }
+    // Not every error body is JSON (e.g. a proxy's HTML error page).
+    const body = await resp.json().then((json) => json, () => null);
+    if (!body) return resp.statusText || "The request failed.";
+    // FastAPI's own validation errors carry a list, not a message.
+    return typeof body.detail === "string" ? body.detail : "The request was invalid.";
   }
 
   function showNoResult(status, detail) {
