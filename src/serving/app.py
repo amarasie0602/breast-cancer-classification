@@ -9,7 +9,7 @@ from typing import Annotated, Dict
 import torch
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
-from PIL import Image, UnidentifiedImageError
+from PIL import Image
 
 from src.data.dataset import SUBTYPE_SCHEMES
 from src.data.stain import MACENKO, StainNormalize
@@ -121,7 +121,7 @@ def _decode_image(image_bytes: bytes) -> Image.Image:
         return image.convert("RGB")
     except Image.DecompressionBombError as e:
         raise HTTPException(status_code=400, detail="Image is too large") from e
-    except (UnidentifiedImageError, OSError, SyntaxError, ValueError) as e:
+    except (OSError, SyntaxError, ValueError) as e:  # UnidentifiedImageError is an OSError
         raise HTTPException(status_code=400, detail="File is not a valid image") from e
 
 
