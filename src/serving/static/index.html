@@ -241,13 +241,16 @@
   }
   .finding.benign { background: var(--benign-soft); border-color: var(--benign); }
   .finding.malignant { background: var(--malignant-soft); border-color: var(--malignant); }
+  .finding.uncertain { background: var(--warn-soft); border-color: var(--warn); }
   .finding .dot { width: 11px; height: 11px; border-radius: 50%; flex: 0 0 11px; }
   .finding.benign .dot { background: var(--benign); }
   .finding.malignant .dot { background: var(--malignant); }
+  .finding.uncertain .dot { background: var(--warn); }
   .finding .txt { flex: 1 1 auto; min-width: 0; }
   .finding .lbl { display: block; font-size: 1.22rem; font-weight: 700; line-height: 1.2; }
   .finding.benign .lbl, .finding.benign .pct { color: var(--benign); }
   .finding.malignant .lbl, .finding.malignant .pct { color: var(--malignant); }
+  .finding.uncertain .lbl, .finding.uncertain .pct { color: var(--warn); }
   .finding .sub { display: block; font-size: 0.74rem; color: var(--muted); }
   .finding .pct { font-family: var(--mono); font-size: 1.4rem; font-weight: 700; }
 
@@ -619,9 +622,16 @@
     const benignP = 1 - malignantP;
     const shown = data.label === "malignant" ? malignantP : benignP;
 
-    finding.className = "finding " + data.label;
-    resultLabel.textContent = DISPLAY_LABEL[data.label] || data.label;
-    resultSub.textContent = SUB_TEXT[data.label] || "";
+    if (data.uncertain) {
+      finding.className = "finding uncertain";
+      resultLabel.textContent = "Uncertain — leans " + (data.label === "malignant" ? "malignant" : "benign");
+      resultSub.textContent =
+        "Borderline result: at this confidence the model is right only about 2 times in 3. Needs expert review.";
+    } else {
+      finding.className = "finding " + data.label;
+      resultLabel.textContent = DISPLAY_LABEL[data.label] || data.label;
+      resultSub.textContent = SUB_TEXT[data.label] || "";
+    }
     resultConfidence.textContent = (shown * 100).toFixed(1) + "%";
 
     document.getElementById("bar-benign").style.width = (benignP * 100).toFixed(1) + "%";
@@ -638,7 +648,8 @@
     resultOverlay.src = "data:image/png;base64," + data.gradcam_overlay_base64;
 
     setStage(1, "ok", "Valid histology");
-    setStage(2, data.label === "malignant" ? "fail" : "ok", DISPLAY_LABEL[data.label]);
+    if (data.uncertain) setStage(2, "skip", "Uncertain");
+    else setStage(2, data.label === "malignant" ? "fail" : "ok", DISPLAY_LABEL[data.label]);
 
     if (data.label !== "malignant") {
       subtypeSection.style.display = "none";

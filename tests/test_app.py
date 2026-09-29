@@ -544,3 +544,35 @@ def test_familiar_image_passes_the_feature_screen(monkeypatch, tmp_path):
 
     assert resp.status_code == 200
     assert screen.seen == 1
+
+
+def _make_coin_toss_checkpoint(tmp_path):
+    """A model whose output is always exactly 50% malignant."""
+    model = BreakHisClassifier(pretrained=False)
+    with torch.no_grad():
+        model.backbone.fc.weight.zero_()
+        model.backbone.fc.bias.zero_()
+    path = tmp_path / "coin_toss.pt"
+    save_checkpoint(path, model, optim.Adam(model.parameters()), epoch=0, metrics={})
+    return path
+
+
+def test_borderline_probability_is_reported_as_uncertain(monkeypatch, tmp_path):
+    get_model.cache_clear()
+    monkeypatch.setattr("src.serving.app.CHECKPOINT_PATH", str(_make_coin_toss_checkpoint(tmp_path)))
+    monkeypatch.setattr("src.serving.app.SUBTYPE_CHECKPOINT_PATH", "nonexistent_subtype.pt")
+
+    body = _post_image(_fake_histology_bytes()).json()
+
+    assert body["probability"] == pytest.approx(0.5)
+    assert body["uncertain"] is True
+
+
+@pytest.mark.parametrize("force_malignant", [True, False])
+def test_confident_probability_is_not_uncertain(monkeypatch, tmp_path, force_malignant):
+    get_model.cache_clear()
+    checkpoint = _make_forced_binary_checkpoint(tmp_path, force_malignant=force_malignant)
+    monkeypatch.setattr("src.serving.app.CHECKPOINT_PATH", str(checkpoint))
+    monkeypatch.setattr("src.serving.app.SUBTYPE_CHECKPOINT_PATH", "nonexistent_subtype.pt")
+
+    assert _post_image(_fake_histology_bytes()).json()["uncertain"] is False

@@ -73,6 +73,15 @@ MAX_IMAGE_PIXELS = 40_000_000
 # whole curve to inform it.
 DECISION_THRESHOLD = float(os.environ.get("DECISION_THRESHOLD", "0.5"))
 
+# Probabilities in this band are reported as uncertain. Measured on the 1,388
+# validation images: inside 0.2-0.8 (15% of images) the served models are
+# right 68% of the time, outside it 94%. A 52%-malignant result shown in the
+# same red box as a 99% one reads as a diagnosis; it's closer to a coin toss.
+UNCERTAIN_BAND = (
+    float(os.environ.get("UNCERTAIN_LOW", "0.2")),
+    float(os.environ.get("UNCERTAIN_HIGH", "0.8")),
+)
+
 # Stage 3 only reports a subtype if its checkpoint actually cleared this
 # validation macro F1. Random guessing over 4 classes scores ~0.25, and
 # both subtype training attempts landed at 0.08-0.19 -- so without this
@@ -268,6 +277,7 @@ async def predict(
     return PredictionResponse(
         label=label,
         probability=probability,
+        uncertain=UNCERTAIN_BAND[0] <= probability <= UNCERTAIN_BAND[1],
         magnification=magnification,
         model_magnification=model_magnification,
         gradcam_overlay_base64=overlay_base64,

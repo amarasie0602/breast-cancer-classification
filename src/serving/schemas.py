@@ -8,6 +8,10 @@ from pydantic import BaseModel
 class PredictionResponse(BaseModel):
     label: str  # "benign" or "malignant"
     probability: float  # malignancy probability, 0-1
+    # True when the probability is in the band where the models are right only
+    # about two times in three (see UNCERTAIN_BAND in app.py); the label is
+    # still the side of the threshold it falls on.
+    uncertain: bool = False
     magnification: str
     # Magnification of the model that actually ran, or None when no
     # magnification-matched checkpoint was available and serving fell back to
