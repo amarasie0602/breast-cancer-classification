@@ -17,7 +17,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from src.data.stain import MACENKO, STAIN_MARKER_FILE, macenko_normalize
+from src.data.stain import MACENKO, macenko_normalize, stain_marker_name
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SOURCE_ROOT = REPO_ROOT / "data" / "BreaKHis_v1"
@@ -52,7 +52,7 @@ def main() -> None:
     written = sum(1 for _ in (OUTPUT_ROOT / "histology_slides").rglob("*.png"))
     if written != len(sources):
         raise SystemExit(f"only {written} of {len(sources)} images written; not marking complete")
-    (OUTPUT_ROOT / STAIN_MARKER_FILE).write_text(MACENKO + "\n", encoding="utf-8")
+    (OUTPUT_ROOT / stain_marker_name(MACENKO)).touch()
     print(f"done; marked {OUTPUT_ROOT} as {MACENKO}-normalized")
 
 

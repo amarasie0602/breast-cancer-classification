@@ -1,6 +1,6 @@
 import pytest
 
-from src.data.stain import STAIN_MARKER_FILE
+from src.data.stain import stain_marker_name
 from src.training.checkpoint import checkpoint_stain_normalization
 from src.training.train import load_config, run_training, within_project
 
@@ -104,7 +104,7 @@ def test_run_training_refuses_raw_data_for_a_stain_normalized_config(
 def test_run_training_refuses_normalized_data_for_a_raw_config(
     breakhis_root_multi_patient, tmp_path
 ):
-    (breakhis_root_multi_patient / STAIN_MARKER_FILE).write_text("macenko\n")
+    (breakhis_root_multi_patient / stain_marker_name("macenko")).touch()
     config = _tiny_config(tmp_path)
     with pytest.raises(ValueError, match="holds macenko images"):
         run_training(config, breakhis_root_multi_patient, "40", (0.5, 0.25, 0.25), pretrained=False)
@@ -117,7 +117,7 @@ def test_stain_normalized_checkpoint_records_its_preprocessing(
     import mlflow
 
     mlflow.set_tracking_uri(f"sqlite:///{tmp_path / 'mlflow.db'}")
-    (breakhis_root_multi_patient / STAIN_MARKER_FILE).write_text("macenko\n")
+    (breakhis_root_multi_patient / stain_marker_name("macenko")).touch()
 
     run_training(
         _tiny_config(tmp_path, stain_normalization="macenko"),

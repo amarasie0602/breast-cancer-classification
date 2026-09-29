@@ -19,12 +19,14 @@ from typing import Optional, Union
 import numpy as np
 from PIL import Image
 
-# Written at the root of a stain-normalized copy of the dataset once every
-# image has been converted; its content names the method. Training and
-# evaluation read it, so a model can't be trained on one colour space and
-# evaluated on another without an error.
-STAIN_MARKER_FILE = "STAIN_NORMALIZATION"
+# A stain-normalized copy of the dataset is marked, once every image has been
+# converted, by an empty file at its root named after the method (e.g.
+# "STAIN_NORMALIZATION.macenko"). Training and evaluation check for it, so a
+# model can't be trained on one colour space and evaluated on another without
+# an error. Only known methods are looked for, and nothing is read from the
+# dataset directory.
 MACENKO = "macenko"
+KNOWN_STAIN_NORMALIZATIONS = (MACENKO,)
 
 # Reference H (column 0) and E (column 1) optical-density vectors, and the
 # 99th-percentile concentration of each stain in the reference image.
@@ -101,10 +103,17 @@ class StainNormalize:
         return f"{type(self).__name__}(method={MACENKO!r})"
 
 
+def stain_marker_name(method: str) -> str:
+    """File name that marks a dataset copy as normalized with ``method``."""
+    return f"STAIN_NORMALIZATION.{method}"
+
+
 def dataset_stain_normalization(root: Union[str, Path]) -> Optional[str]:
     """The stain normalization a dataset copy was built with, or None for raw data."""
-    marker = Path(root) / STAIN_MARKER_FILE
-    return marker.read_text(encoding="utf-8").strip() if marker.is_file() else None
+    for method in KNOWN_STAIN_NORMALIZATIONS:
+        if (Path(root) / stain_marker_name(method)).is_file():
+            return method
+    return None
 
 
 def require_stain_normalization(data_root: Union[str, Path], expected: Optional[str]) -> None:
