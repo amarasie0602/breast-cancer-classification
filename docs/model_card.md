@@ -9,9 +9,12 @@ tool and must not be used to inform real patient care or treatment
 decisions. Given a breast tissue histology image, it:
 
 1. **Validates the input** is plausibly an H&E-stained histology image at
-   all (`src/serving/input_guard.py`), rejecting photos, screenshots, and
-   other unrelated images with a clear "Invalid Image" response rather than
-   forcing every input through the classifier.
+   all, rejecting photos, screenshots, and other unrelated images with a
+   clear "Invalid Image" response rather than forcing every input through the
+   classifier. Two checks: a colour-and-texture screen
+   (`src/serving/input_guard.py`), then a check that a general-purpose
+   network's description of the image resembles the training slides'
+   (`src/serving/ood.py`).
 2. **Classifies benign vs. malignant** (the original binary model).
 3. **For malignant results only**, classifies the malignant subtype among
    the four BreakHis actually labels: Invasive Ductal Carcinoma (IDC),
@@ -194,12 +197,28 @@ has as few as 135 images at a single magnification).
   With both the 4-way and the pooled 2-way question tried, the limit is the
   number of patients, not the modelling choices. Another training run on
   this data isn't expected to change that; more patients per subtype would.
-- **Input validation is a heuristic, not a trained classifier.** Stage 1
-  (`src/serving/input_guard.py`) screens for H&E-characteristic color and
-  texture; it catches ordinary photos, cartoons, and blank images but is
-  not a real out-of-distribution detector — an adversarial or unusual image
-  could still pass through to stages 2-3 and receive a meaningless
-  confident label.
+- **Input validation is measured, but on few examples of what it should
+  reject.** Before deployment, every held-out test image was sent through
+  the running app. The original colour screen rejected 7 of them (faint H&E
+  slides) and, on the training and validation images, 1.5%; it also passed
+  11 of 44 non-histology images, one of which the model then called 98.5%
+  malignant. It was recalibrated on the 6,836 training and validation
+  images, and a second check added: an ImageNet EfficientNet-B0 describes
+  the image, and a probabilistic-PCA distance fitted on the training slides
+  (threshold: the highest validation score) decides whether it looks like
+  one. (The cancer models' own features couldn't do this; they placed
+  wallpapers among the slides.)
+
+  | | Original screen | Recalibrated colour screen alone | Colour screen + feature check (served) |
+  | --- | --- | --- | --- |
+  | Held-out test slides rejected | 7 of 1,073 | 0 of 1,073 | **0 of 1,073** |
+  | Non-histology images let through | 11 of 44 | 18 of 44 | **3 of 44** (all synthetic noise) |
+  | ...of which real photos, wallpapers, screenshots (37) | 8 | 15 | **0** |
+
+  The non-histology set is small (the images available on this machine),
+  so the real false-accept rate is unknown. Random noise still passes: its
+  texture is within real slides' range and ImageNet features don't flag it.
+  Anything that passes goes on to stages 2-3 and gets a confident label.
 - **Subtype-specific failure mode.** Error analysis on the 40x model found
   its most confident mistakes concentrated almost entirely on one benign
   subtype (`tubular_adenoma`), predicted malignant with near-certainty.
