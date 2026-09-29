@@ -405,14 +405,6 @@ def _make_binary_checkpoint_with_preprocessing(tmp_path, stain_normalization):
     return path
 
 
-class _SpyStainNormalize:
-    calls = 0
-
-    def __call__(self, image):
-        type(self).calls += 1
-        return image
-
-
 @pytest.mark.parametrize("stain_normalization, expected_calls", [("macenko", 1), (None, 0)])
 def test_upload_is_stain_normalized_only_for_a_model_trained_that_way(
     monkeypatch, tmp_path, stain_normalization, expected_calls
@@ -421,8 +413,14 @@ def test_upload_is_stain_normalized_only_for_a_model_trained_that_way(
     get_model.cache_clear()
     monkeypatch.setattr("src.serving.app.CHECKPOINT_PATH", str(checkpoint))
     monkeypatch.setattr("src.serving.app.SUBTYPE_CHECKPOINT_PATH", "nonexistent_subtype.pt")
-    _SpyStainNormalize.calls = 0
-    monkeypatch.setattr("src.serving.app.StainNormalize", _SpyStainNormalize)
+    normalized = []
+
+    class SpyStainNormalize:
+        def __call__(self, image):
+            normalized.append(image)
+            return image
+
+    monkeypatch.setattr("src.serving.app.StainNormalize", SpyStainNormalize)
 
     resp = client.post(
         "/predict",
@@ -431,7 +429,7 @@ def test_upload_is_stain_normalized_only_for_a_model_trained_that_way(
     )
 
     assert resp.status_code == 200
-    assert _SpyStainNormalize.calls == expected_calls
+    assert len(normalized) == expected_calls
 
 
 def test_model_needing_unknown_preprocessing_is_refused_not_guessed(monkeypatch, tmp_path):
