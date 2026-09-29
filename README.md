@@ -11,7 +11,10 @@ versioning, automated testing, containerized serving, and CI/CD.
 1. **Image validation** — reject inputs that don't plausibly look like an
    H&E-stained histology image (photos, screenshots, unrelated images)
    before running them through a classifier that has no way to say "I
-   don't recognize this."
+   don't recognize this." A colour-and-texture screen, then a check that a
+   general-purpose network sees the image as resembling the training
+   slides. On the held-out test set it rejects no real slide and none of the
+   37 photos and screenshots tried ([numbers](docs/model_card.md#limitations)).
 2. **Benign vs. malignant** classification (binary).
 3. **Malignant subtype** classification (Invasive Ductal Carcinoma,
    Invasive Lobular Carcinoma, Mucinous Carcinoma, or Papillary Carcinoma —
@@ -95,7 +98,7 @@ flowchart LR
         GHCR -.->|"optional deploy hook"| HOST["Render / Railway"]
     end
 
-    SV -->|"baked into image"| API["FastAPI<br/>1. input_guard (reject non-histology)<br/>2. /predict binary (model matching the<br/>selected magnification)<br/>3. /predict subtype (if malignant)"]
+    SV -->|"baked into image"| API["FastAPI<br/>1. input_guard + feature screen (reject non-histology)<br/>2. /predict binary (model matching the<br/>selected magnification)<br/>3. /predict subtype (if malignant)"]
     API -->|"label + subtype + Grad-CAM overlay"| CLIENT["client"]
 ```
 
@@ -115,7 +118,7 @@ src/
   models/                  ResNet50 transfer-learning classifiers (binary + subtype)
   training/                Train/eval loops (binary + subtype), metrics, checkpointing, MLflow logging, CLIs
   explainability/          Grad-CAM, overlay rendering, MLflow artifact logging
-  serving/                 FastAPI app: input_guard (stage 1), /predict (stages 2-3), static web UI
+  serving/                 FastAPI app: input_guard + ood feature screen (stage 1), /predict (stages 2-3), static web UI
 tests/                     pytest suite (unit + integration + model validation gate)
 configs/                   YAML configs for data splits and training hyperparameters
 notebooks/                 EDA, error analysis
