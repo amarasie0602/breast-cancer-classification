@@ -9,7 +9,7 @@ from typing import Annotated, Dict
 import torch
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
-from PIL import Image, UnidentifiedImageError
+from PIL import Image
 
 from src.data.dataset import SUBTYPE_SCHEMES
 from src.data.stain import MACENKO, StainNormalize
@@ -19,6 +19,7 @@ from src.explainability.overlay import cam_to_overlay
 from src.serving.input_guard import looks_like_histology
 from src.serving.logging_middleware import RequestLoggingMiddleware
 from src.serving.metrics import get_prediction_distribution, record_prediction
+from src.serving.ood import load_histology_screen
 from src.serving.model_loader import (
     binary_checkpoint_stain_normalization,
     get_model,
@@ -46,10 +47,22 @@ CHECKPOINT_PATH = os.environ.get("CHECKPOINT_PATH", "serving_checkpoints/best_ma
 # 40x checkpoint).
 CHECKPOINT_DIR = Path(os.environ.get("CHECKPOINT_DIR", "serving_checkpoints"))
 ALLOWED_MAGNIFICATIONS = ("40", "100", "200", "400")
+# Stage 1's second check (src/serving/ood.py): skipped if it hasn't been
+# fitted, so the app still runs without it.
+HISTOLOGY_SCREEN_PATH = os.environ.get(
+    "HISTOLOGY_SCREEN_PATH", "serving_checkpoints/histology_screen.pt"
+)
 SUBTYPE_CHECKPOINT_PATH = os.environ.get(
     "SUBTYPE_CHECKPOINT_PATH", "serving_checkpoints/best_subtype.pt"
 )
 STATIC_DIR = Path(__file__).parent / "static"
+
+# BreakHis images are 700x460 (0.3 megapixels). Much larger uploads are refused
+# before decoding: Pillow only warns below ~179M pixels, and decoding an image
+# that size allocates gigabytes. The byte limit stops an oversized upload from
+# being read into memory at all.
+MAX_UPLOAD_BYTES = int(os.environ.get("MAX_UPLOAD_BYTES", str(20 * 1024 * 1024)))
+MAX_IMAGE_PIXELS = 40_000_000
 
 # Operating point for benign/malignant. 0.5 is where sigmoid happens to
 # cross, not a chosen threshold: at 0.5 this model runs at sensitivity
@@ -92,6 +105,33 @@ def health() -> Dict[str, str]:
 @app.get("/metrics")
 def metrics() -> Dict[str, Dict[str, int]]:
     return {"prediction_distribution": get_prediction_distribution()}
+
+
+def _decode_image(image_bytes: bytes) -> Image.Image:
+    """Decode an upload to RGB, turning every way it can be unreadable into a 400."""
+    try:
+        image = Image.open(io.BytesIO(image_bytes))
+        if image.width * image.height > MAX_IMAGE_PIXELS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Image is too large ({image.width}x{image.height} pixels)",
+            )
+        # Image.open only reads the header; a truncated or corrupt body only
+        # fails here, when the pixels are actually decoded.
+        return image.convert("RGB")
+    except Image.DecompressionBombError as e:
+        raise HTTPException(status_code=400, detail="Image is too large") from e
+    except (OSError, SyntaxError, ValueError) as e:  # UnidentifiedImageError is an OSError
+        raise HTTPException(status_code=400, detail="File is not a valid image") from e
+
+
+def _is_histology(image: Image.Image) -> bool:
+    """Stage 1: the cheap colour-and-texture screen, then (only if that passes)
+    the check that the image resembles the training slides at all."""
+    if not looks_like_histology(image):
+        return False
+    screen = load_histology_screen(HISTOLOGY_SCREEN_PATH)
+    return screen is None or not screen.is_unfamiliar(image)
 
 
 def _binary_checkpoint_for(magnification: str):
@@ -149,7 +189,8 @@ def _classify_subtype(tensor):
 @app.post(
     "/predict",
     responses={
-        400: {"description": "Unsupported magnification, or the file is not an image"},
+        400: {"description": "Unsupported magnification, or the file is not a usable image"},
+        413: {"description": "The upload is larger than MAX_UPLOAD_BYTES"},
         422: {"description": "Not a breast histology image (stage 1 rejected it)"},
         503: {"description": "No usable model checkpoint is available to serve"},
     },
@@ -164,17 +205,19 @@ async def predict(
             detail=f"magnification must be one of {', '.join(ALLOWED_MAGNIFICATIONS)}",
         )
 
-    image_bytes = await file.read()
-    try:
-        image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-    except UnidentifiedImageError as e:
-        raise HTTPException(status_code=400, detail="File is not a valid image") from e
+    image_bytes = await file.read(MAX_UPLOAD_BYTES + 1)
+    if len(image_bytes) > MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File is larger than {MAX_UPLOAD_BYTES // (1024 * 1024)} MB",
+        )
+    image = _decode_image(image_bytes)
 
     checkpoint_path, model_magnification = _binary_checkpoint_for(magnification)
     if not os.path.exists(checkpoint_path):
         raise HTTPException(status_code=503, detail="Model checkpoint not available")
 
-    if not looks_like_histology(image):
+    if not _is_histology(image):
         raise HTTPException(
             status_code=422,
             detail="Invalid Image — Please upload a valid breast histology image.",

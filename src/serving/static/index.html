@@ -547,6 +547,11 @@
   };
 
   let selectedFile = null;
+  let previewUrl = null;
+  // Bumped whenever a new file is chosen, so a response to an earlier upload
+  // that arrives late is dropped instead of shown under the new file's name.
+  let currentRequest = 0;
+  const PLACEHOLDER_HTML = placeholder.innerHTML;
 
   function setStage(n, state, text) {
     document.getElementById("stage-" + n).dataset.state = state;
@@ -572,11 +577,14 @@
   function selectFile(file) {
     if (!file) return;
     selectedFile = file;
+    currentRequest++;
     submitBtn.disabled = false;
     dropzoneText.textContent = file.name + " — click to change";
-    const url = URL.createObjectURL(file);
-    preview.src = url;
-    gradcamOriginal.src = url;
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    previewUrl = URL.createObjectURL(file);
+    preview.src = previewUrl;
+    gradcamOriginal.src = previewUrl;
+    placeholder.innerHTML = PLACEHOLDER_HTML;
     preview.style.display = "block";
     dropzone.classList.add("has-image");
     showResults(false);
@@ -657,10 +665,28 @@
     scrollHint.style.display = "inline-block";
   }
 
+  async function errorDetail(resp) {
+    // Not every error body is JSON (e.g. a proxy's HTML error page).
+    const body = await resp.json().then((json) => json, () => null);
+    if (!body) return resp.statusText || "The request failed.";
+    // FastAPI's own validation errors carry a list, not a message.
+    return typeof body.detail === "string" ? body.detail : "The request was invalid.";
+  }
+
+  function showNoResult(status, detail) {
+    if (status === 422) setStage(1, "fail", "Rejected");
+    else if (status === 400 || status === 413) setStage(1, "fail", "Unreadable file");
+    else setStage(1, "idle", "Not run");
+    setStage(2, "idle", "Not run");
+    setStage(3, "idle", "Not run");
+    placeholder.textContent = "No result: " + detail;
+  }
+
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     if (!selectedFile) return;
 
+    const request = ++currentRequest;
     submitBtn.disabled = true;
     setBusy("Analysing specimen…");
     showResults(false);
@@ -674,27 +700,22 @@
 
     try {
       const resp = await fetch("/predict", { method: "POST", body: formData });
+      if (request !== currentRequest) return;
       if (!resp.ok) {
-        let detail = resp.statusText;
-        try {
-          const body = await resp.json();
-          detail = body.detail || detail;
-        } catch (_) {
-          // Not a JSON body (e.g. a proxy's HTML error page): keep the HTTP status text.
-        }
-        if (resp.status === 422) setStage(1, "fail", "Rejected");
-        else if (resp.status === 400) setStage(1, "fail", "Unreadable file");
-        else setStage(1, "idle", "Not run");
-        setStage(2, "idle", "Not run");
-        setStage(3, "idle", "Not run");
+        const detail = await errorDetail(resp);
+        if (request !== currentRequest) return;
+        showNoResult(resp.status, detail);
         throw new Error(detail);
       }
-      renderReport(await resp.json());
+      const data = await resp.json();
+      if (request !== currentRequest) return;
+      renderReport(data);
       setStatus("");
     } catch (err) {
+      if (request !== currentRequest) return;
       setStatus(err.message || "Something went wrong.", true);
     } finally {
-      submitBtn.disabled = false;
+      if (request === currentRequest) submitBtn.disabled = false;
     }
   });
 </script>

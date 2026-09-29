@@ -25,6 +25,8 @@ def _isolate_checkpoint_dir(monkeypatch, tmp_path):
     empty = tmp_path / "no_mag_checkpoints"
     empty.mkdir()
     monkeypatch.setattr("src.serving.app.CHECKPOINT_DIR", empty)
+    # Likewise stage 1's feature-distance screen: tests that exercise it opt in.
+    monkeypatch.setattr("src.serving.app.HISTOLOGY_SCREEN_PATH", str(tmp_path / "no_screen.pt"))
 
 
 def _make_forced_binary_checkpoint(tmp_path, force_malignant: bool):
@@ -445,3 +447,100 @@ def test_model_needing_unknown_preprocessing_is_refused_not_guessed(monkeypatch,
 
     assert resp.status_code == 503
     assert "vahadane" in resp.json()["detail"]
+
+
+def _post_image(content, magnification: str = "40"):
+    return client.post(
+        "/predict",
+        files={"file": ("upload.png", content, "image/png")},
+        data={"magnification": magnification},
+    )
+
+
+def test_truncated_image_is_a_400_not_a_500(monkeypatch, tmp_path):
+    # Image.open only reads the header, so a cut-off file used to fail later,
+    # during decoding, with an error nothing caught.
+    monkeypatch.setattr("src.serving.app.CHECKPOINT_PATH", str(tmp_path / "unused.pt"))
+    truncated = _fake_histology_bytes().getvalue()[:400]
+
+    resp = _post_image(truncated)
+
+    assert resp.status_code == 400
+    assert resp.json()["detail"] == "File is not a valid image"
+
+
+def test_image_over_the_pixel_limit_is_refused_before_decoding(monkeypatch):
+    monkeypatch.setattr("src.serving.app.MAX_IMAGE_PIXELS", 1000)
+
+    resp = _post_image(_fake_histology_bytes())
+
+    assert resp.status_code == 400
+    assert "too large" in resp.json()["detail"]
+
+
+def test_decompression_bomb_is_a_400_not_a_500(monkeypatch):
+    # Pillow itself refuses images above twice its MAX_IMAGE_PIXELS at open().
+    monkeypatch.setattr("PIL.Image.MAX_IMAGE_PIXELS", 100)
+
+    resp = _post_image(_fake_histology_bytes())
+
+    assert resp.status_code == 400
+    assert resp.json()["detail"] == "Image is too large"
+
+
+def test_upload_over_the_size_limit_is_a_413(monkeypatch):
+    monkeypatch.setattr("src.serving.app.MAX_UPLOAD_BYTES", 100)
+
+    resp = _post_image(_fake_histology_bytes())
+
+    assert resp.status_code == 413
+
+
+class _StubScreen:
+    def __init__(self, unfamiliar):
+        self.unfamiliar = unfamiliar
+        self.seen = 0
+
+    def is_unfamiliar(self, image):
+        self.seen += 1
+        return self.unfamiliar
+
+
+def test_image_the_feature_screen_finds_unfamiliar_is_rejected_at_stage_1(monkeypatch, tmp_path):
+    # Purple and textured enough for the colour screen, unlike any training slide.
+    checkpoint_path = _make_forced_binary_checkpoint(tmp_path, force_malignant=True)
+    get_model.cache_clear()
+    monkeypatch.setattr("src.serving.app.CHECKPOINT_PATH", str(checkpoint_path))
+    screen = _StubScreen(unfamiliar=True)
+    monkeypatch.setattr("src.serving.app.load_histology_screen", lambda path: screen)
+
+    resp = _post_image(_fake_histology_bytes())
+
+    assert resp.status_code == 422
+    assert resp.json()["detail"] == "Invalid Image — Please upload a valid breast histology image."
+    assert screen.seen == 1
+
+
+def test_feature_screen_is_not_run_when_the_colour_screen_already_rejected(monkeypatch, tmp_path):
+    checkpoint_path = _make_forced_binary_checkpoint(tmp_path, force_malignant=True)
+    monkeypatch.setattr("src.serving.app.CHECKPOINT_PATH", str(checkpoint_path))
+    screen = _StubScreen(unfamiliar=False)
+    monkeypatch.setattr("src.serving.app.load_histology_screen", lambda path: screen)
+
+    resp = _post_image(_fake_photo_bytes())
+
+    assert resp.status_code == 422
+    assert screen.seen == 0
+
+
+def test_familiar_image_passes_the_feature_screen(monkeypatch, tmp_path):
+    checkpoint_path = _make_forced_binary_checkpoint(tmp_path, force_malignant=False)
+    get_model.cache_clear()
+    monkeypatch.setattr("src.serving.app.CHECKPOINT_PATH", str(checkpoint_path))
+    screen = _StubScreen(unfamiliar=False)
+    monkeypatch.setattr("src.serving.app.load_histology_screen", lambda path: screen)
+
+    resp = _post_image(_fake_histology_bytes())
+
+    assert resp.status_code == 200
+    assert screen.seen == 1
