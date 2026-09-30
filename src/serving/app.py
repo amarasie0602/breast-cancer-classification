@@ -18,6 +18,7 @@ from src.explainability.gradcam import GradCAM
 from src.explainability.overlay import cam_to_overlay
 from src.serving.input_guard import looks_like_histology
 from src.serving.logging_middleware import RequestLoggingMiddleware
+from src.serving.magnification import load_magnification_detector
 from src.serving.metrics import get_prediction_distribution, record_prediction
 from src.serving.ood import load_histology_screen
 from src.serving.model_loader import (
@@ -47,6 +48,15 @@ CHECKPOINT_PATH = os.environ.get("CHECKPOINT_PATH", "serving_checkpoints/best_ma
 # 40x checkpoint).
 CHECKPOINT_DIR = Path(os.environ.get("CHECKPOINT_DIR", "serving_checkpoints"))
 ALLOWED_MAGNIFICATIONS = ("40", "100", "200", "400")
+# The default: detect the magnification from the image and use its model.
+AUTO = "auto"
+MAGNIFICATION_DETECTOR_PATH = os.environ.get(
+    "MAGNIFICATION_DETECTOR_PATH", "serving_checkpoints/magnification.pt"
+)
+# Below this confidence the detected magnification is still used, but the
+# response says it may be wrong; above it, a manual choice that disagrees
+# gets a warning. Chosen on validation images (scripts/train_magnification.py).
+MIN_DETECTION_CONFIDENCE = float(os.environ.get("MIN_DETECTION_CONFIDENCE", "0.9"))
 # Stage 1's second check (src/serving/ood.py): skipped if it hasn't been
 # fitted, so the app still runs without it.
 HISTOLOGY_SCREEN_PATH = os.environ.get(
@@ -143,6 +153,37 @@ def _is_histology(image: Image.Image) -> bool:
     return screen is None or not screen.is_unfamiliar(image)
 
 
+def _choose_magnification(requested: str, image: Image.Image):
+    """Return (magnification to use, "detected" or "selected", detected
+    magnification, its confidence, warning or None)."""
+    detector = load_magnification_detector(MAGNIFICATION_DETECTOR_PATH)
+    detected, confidence = detector.detect(image) if detector else (None, None)
+
+    if requested == AUTO:
+        if detected is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Automatic magnification detection isn't available; "
+                "choose the magnification the image was captured at.",
+            )
+        warning = None
+        if confidence < MIN_DETECTION_CONFIDENCE:
+            warning = (
+                f"Unsure of this image's magnification (best guess {detected}×, "
+                f"{confidence:.0%} confident). If you know the zoom it was captured at, "
+                "select it and analyse again."
+            )
+        return detected, "detected", detected, confidence, warning
+
+    warning = None
+    if detected and detected != requested and confidence >= MIN_DETECTION_CONFIDENCE:
+        warning = (
+            f"This image looks like {detected}× ({confidence:.0%} confident) but {requested}× "
+            f"was selected, so the {requested}× model's result may not be meaningful."
+        )
+    return requested, "selected", detected, confidence, warning
+
+
 def _binary_checkpoint_for(magnification: str):
     """Return (checkpoint path, magnification of the model actually used).
 
@@ -206,12 +247,12 @@ def _classify_subtype(tensor):
 )
 async def predict(
     file: Annotated[UploadFile, File()],
-    magnification: Annotated[str, Form()] = "40",
+    magnification: Annotated[str, Form()] = AUTO,
 ) -> PredictionResponse:
-    if magnification not in ALLOWED_MAGNIFICATIONS:
+    if magnification != AUTO and magnification not in ALLOWED_MAGNIFICATIONS:
         raise HTTPException(
             status_code=400,
-            detail=f"magnification must be one of {', '.join(ALLOWED_MAGNIFICATIONS)}",
+            detail=f"magnification must be {AUTO} or one of {', '.join(ALLOWED_MAGNIFICATIONS)}",
         )
 
     image_bytes = await file.read(MAX_UPLOAD_BYTES + 1)
@@ -222,15 +263,18 @@ async def predict(
         )
     image = _decode_image(image_bytes)
 
-    checkpoint_path, model_magnification = _binary_checkpoint_for(magnification)
-    if not os.path.exists(checkpoint_path):
-        raise HTTPException(status_code=503, detail="Model checkpoint not available")
-
     if not _is_histology(image):
         raise HTTPException(
             status_code=422,
             detail="Invalid Image — Please upload a valid breast histology image.",
         )
+
+    magnification, magnification_source, detected, detection_confidence, magnification_warning = (
+        _choose_magnification(magnification, image)
+    )
+    checkpoint_path, model_magnification = _binary_checkpoint_for(magnification)
+    if not os.path.exists(checkpoint_path):
+        raise HTTPException(status_code=503, detail="Model checkpoint not available")
 
     stain_normalization = binary_checkpoint_stain_normalization(checkpoint_path)
     if stain_normalization not in (None, MACENKO):
@@ -279,6 +323,10 @@ async def predict(
         probability=probability,
         uncertain=UNCERTAIN_BAND[0] <= probability <= UNCERTAIN_BAND[1],
         magnification=magnification,
+        magnification_source=magnification_source,
+        detected_magnification=detected,
+        detected_magnification_confidence=detection_confidence,
+        magnification_warning=magnification_warning,
         model_magnification=model_magnification,
         gradcam_overlay_base64=overlay_base64,
         subtype=subtype,
