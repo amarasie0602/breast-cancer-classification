@@ -15,7 +15,10 @@ versioning, automated testing, containerized serving, and CI/CD.
    general-purpose network sees the image as resembling the training
    slides. On the held-out test set it rejects no real slide and none of the
    37 photos and screenshots tried ([numbers](docs/model_card.md#limitations)).
-2. **Benign vs. malignant** classification (binary).
+2. **Benign vs. malignant** classification (binary), by the model for the
+   image's magnification, which is detected from the image by default.
+   Borderline probabilities (0.2-0.8) are reported as "Uncertain" rather
+   than as a finding.
 3. **Malignant subtype** classification (Invasive Ductal Carcinoma,
    Invasive Lobular Carcinoma, Mucinous Carcinoma, or Papillary Carcinoma —
    the four subtypes BreakHis actually labels), only run when stage 2
