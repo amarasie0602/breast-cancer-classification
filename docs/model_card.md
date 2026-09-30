@@ -307,16 +307,37 @@ positive (a missed cancer is worse than a false alarm), but a tool that
 flags half of healthy tissue would be impractical in real use, and no
 aggregate score above should be read as "the model works."
 
-### Each magnification is served by its own model
+### Each magnification is served by its own model, detected from the image
 
-The four models above are not interchangeable, so `/predict` classifies an
-image with the model trained at the magnification the user selects. The
-serving image ships all four (as weights-only copies, see
-`scripts/export_serving_checkpoints.py`); until it did, every request in the
-deployed app was answered by the 40x model regardless of the selection.
-This only helps if the selection is right: the app has no way to check it,
-and a 400x image labelled as 200x is scored by a model that never saw
-400x tissue.
+The four models above are not interchangeable: the same image scored 52%,
+41%, 52% and 24% malignant with the 40x, 100x, 200x and 400x models, since
+three of them read the tissue at the wrong scale. Users often don't know the
+zoom, so by default `/predict` detects it (a fine-tuned EfficientNet-B0,
+`scripts/train_magnification.py`) and uses the matching model; a user can
+still choose one, and is warned if the image confidently looks like another.
+
+| Magnification detector | Validation (epoch chosen on) | Held-out test |
+| --- | --- | --- |
+| Accuracy | 98.6% | 96.2% |
+| When at least 90% confident | 99.8% (92% of images) | 98.3% (88% of images) |
+
+Below 90% the best guess is still used, with a warning that it may be wrong.
+Its mistakes are between neighbouring zoom levels, mostly 400x read as 200x.
+Sending all 1,073 held-out test images through the running app with
+automatic detection: 1,032 reached the matching model, 25 of the other 41
+carried the "unsure" warning, and the overall result was practically the
+same as always choosing the right magnification by hand (734 of 767
+cancers caught either way; 175 vs 176 of 306 benign images cleared).
+
+### Borderline results are reported as uncertain
+
+A 52%-malignant result used to be shown in the same red box as a 99% one.
+Between 0.2 and 0.8 malignant probability the served models are right 68%
+of the time on validation images, against 94% outside it, so that band is
+reported as "Uncertain" (leaning benign or malignant) instead of as a
+finding. On the held-out test images, 12% fall in the band and 59% of those
+are right, against 88% outside it; a third of all wrong predictions (53 of
+163) are now flagged rather than stated.
 
 ### Threshold tuning was tried, and rejected
 
