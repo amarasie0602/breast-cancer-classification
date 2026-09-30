@@ -15,7 +15,7 @@ from typing import Optional, Tuple, Union
 import torch
 from PIL import Image
 from torch import nn
-from torchvision.models import efficientnet_b0
+from torchvision.models import EfficientNet_B0_Weights, efficientnet_b0
 
 from src.data.transforms import eval_transform
 
@@ -24,9 +24,10 @@ logger = logging.getLogger(__name__)
 MAGNIFICATIONS = ("40", "100", "200", "400")
 
 
-def build_network() -> nn.Module:
-    """EfficientNet-B0 with a 4-way magnification head (untrained weights)."""
-    network = efficientnet_b0(weights=None)
+def build_network(pretrained: bool = False) -> nn.Module:
+    """EfficientNet-B0 with a 4-way magnification head. Training starts from
+    ImageNet weights; serving loads the trained ones over an empty network."""
+    network = efficientnet_b0(weights=EfficientNet_B0_Weights.IMAGENET1K_V1 if pretrained else None)
     network.classifier[1] = nn.Linear(network.classifier[1].in_features, len(MAGNIFICATIONS))
     return network
 

@@ -6,6 +6,8 @@ A general-purpose ImageNet network's features only reach ~82% on this
 (validation), confusing neighbouring zoom levels, so this fine-tunes
 EfficientNet-B0 on the task itself.
 
+Writes the chosen epoch's weights to serving_checkpoints/magnification.pt.
+
 Augmentation deliberately excludes random crops and rescaling: apparent
 scale is the signal being learned. Training uses the training patients, the
 best epoch is chosen on the validation patients, and the held-out test
@@ -21,17 +23,18 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
-from torchvision.models import EfficientNet_B0_Weights, efficientnet_b0
 
 from src.data.dataset import BreakHisDataset
 from src.data.splits import stratified_patient_split
 from src.data.transforms import IMAGE_SIZE, IMAGENET_MEAN, IMAGENET_STD, eval_transform
+from src.serving.magnification import MAGNIFICATIONS, build_network
 from src.training.train import NUM_WORKERS, load_config
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DATA_ROOT = REPO_ROOT / "data" / "BreaKHis_v1"
 OUTPUT = REPO_ROOT / "checkpoints" / "experiments" / "magnification" / "best.pt"
-MAGNIFICATIONS = ("40", "100", "200", "400")
+# Weights only, what serving loads (src/serving/magnification.py).
+SERVING_OUTPUT = REPO_ROOT / "serving_checkpoints" / "magnification.pt"
 EPOCHS = 6
 BATCH_SIZE = 32
 
@@ -63,12 +66,6 @@ class MagnificationDataset(Dataset):
         s = self.samples[i]
         image = Image.open(s["path"]).convert("RGB")
         return self.transform(image), MAGNIFICATIONS.index(s["magnification"])
-
-
-def build_model(pretrained: bool = True) -> nn.Module:
-    model = efficientnet_b0(weights=EfficientNet_B0_Weights.IMAGENET1K_V1 if pretrained else None)
-    model.classifier[1] = nn.Linear(model.classifier[1].in_features, len(MAGNIFICATIONS))
-    return model
 
 
 def split_samples():
@@ -121,7 +118,7 @@ def main() -> None:
     torch.manual_seed(0)
     splits = split_samples()
     print({k: len(v) for k, v in splits.items()}, flush=True)
-    model = build_model()
+    model = build_network(pretrained=True)
     optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4, weight_decay=1e-4)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=EPOCHS)
     loader = DataLoader(
@@ -153,6 +150,8 @@ def main() -> None:
     model.load_state_dict(torch.load(OUTPUT, weights_only=True)["model_state"])
     report("validation (selection)", *predict(model, splits["val"]))
     report("held-out test", *predict(model, splits["test"]))
+    torch.save(model.state_dict(), SERVING_OUTPUT)
+    print(f"wrote {SERVING_OUTPUT.name}")
 
 
 if __name__ == "__main__":
