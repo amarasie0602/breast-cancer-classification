@@ -175,6 +175,7 @@
     background: var(--panel); color: var(--text);
   }
   .mag { margin-top: 10px; }
+  .mag-warning { display: none; margin: 8px 0 0; }
   .mag .hint { display: block; margin-top: 5px; font-size: 0.72rem; line-height: 1.35; color: var(--muted); }
 
   button.analyze {
@@ -403,12 +404,13 @@
         <div class="mag">
           <label class="field" for="magnification">Magnification</label>
           <select id="magnification" name="magnification" aria-describedby="magnification-hint">
+            <option value="auto" selected>Auto-detect (recommended)</option>
             <option value="40">40× — low power</option>
             <option value="100">100×</option>
             <option value="200">200×</option>
             <option value="400">400× — high power</option>
           </select>
-          <span class="hint" id="magnification-hint">Choose the zoom the image was captured at. Each magnification has its own model; a result from the wrong one isn't meaningful.</span>
+          <span class="hint" id="magnification-hint">Each magnification has its own model, and a result from the wrong one isn't meaningful. Auto-detect reads the zoom from the image; choose one only if you know the magnification it was captured at.</span>
         </div>
 
         <button type="submit" class="analyze" id="submit-btn" disabled>Analyse specimen</button>
@@ -451,6 +453,7 @@
             </span>
             <span class="pct" id="result-confidence"></span>
           </div>
+          <div class="notice mag-warning" id="mag-warning" role="status"></div>
 
           <div class="probs">
             <div class="prob-row">
@@ -641,7 +644,14 @@
     document.getElementById("val-benign").textContent = (benignP * 100).toFixed(1) + "%";
     document.getElementById("val-malignant").textContent = (malignantP * 100).toFixed(1) + "%";
 
-    document.getElementById("kv-mag").textContent = data.magnification + "×";
+    document.getElementById("kv-mag").textContent =
+      data.magnification + "× " +
+      (data.magnification_source === "detected"
+        ? "(detected, " + Math.round(data.detected_magnification_confidence * 100) + "%)"
+        : "(selected)");
+    const magWarning = document.getElementById("mag-warning");
+    magWarning.textContent = data.magnification_warning || "";
+    magWarning.style.display = data.magnification_warning ? "block" : "none";
     document.getElementById("kv-model").textContent = data.model_magnification
       ? data.model_magnification + "× model"
       : "default model (no " + data.magnification + "× model deployed)";
