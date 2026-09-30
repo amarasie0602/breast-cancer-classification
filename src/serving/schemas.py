@@ -8,7 +8,19 @@ from pydantic import BaseModel
 class PredictionResponse(BaseModel):
     label: str  # "benign" or "malignant"
     probability: float  # malignancy probability, 0-1
-    magnification: str
+    # True when the probability is in the band where the models are right only
+    # about two times in three (see UNCERTAIN_BAND in app.py); the label is
+    # still the side of the threshold it falls on.
+    uncertain: bool = False
+    magnification: str  # the magnification whose model was used
+    # "detected" when the magnification came from the image, "selected" when
+    # the request named one.
+    magnification_source: str = "selected"
+    detected_magnification: Optional[str] = None
+    detected_magnification_confidence: Optional[float] = None
+    # Set when the detected magnification is unsure, or confidently disagrees
+    # with the one selected.
+    magnification_warning: Optional[str] = None
     # Magnification of the model that actually ran, or None when no
     # magnification-matched checkpoint was available and serving fell back to
     # its default model. Lets the UI say plainly when those differ.

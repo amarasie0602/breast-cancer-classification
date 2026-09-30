@@ -38,3 +38,8 @@ def test_stage_1_feature_screen_ships_with_the_models():
     # and falls back to the colour screen alone.
     assert (SERVING_DIR / "histology_screen.pt").is_file()
     assert (SERVING_DIR / "histology_screen.ood.npz").is_file()
+
+
+def test_magnification_detector_ships_with_the_models():
+    # Without it /predict can't auto-detect and asks the user to choose.
+    assert (SERVING_DIR / "magnification.pt").is_file()

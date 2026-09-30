@@ -175,6 +175,8 @@
     background: var(--panel); color: var(--text);
   }
   .mag { margin-top: 10px; }
+  .mag-warning { display: none; margin: 8px 0 0; }
+  .mag .hint { display: block; margin-top: 5px; font-size: 0.72rem; line-height: 1.35; color: var(--muted); }
 
   button.analyze {
     width: 100%;
@@ -241,13 +243,16 @@
   }
   .finding.benign { background: var(--benign-soft); border-color: var(--benign); }
   .finding.malignant { background: var(--malignant-soft); border-color: var(--malignant); }
+  .finding.uncertain { background: var(--warn-soft); border-color: var(--warn); }
   .finding .dot { width: 11px; height: 11px; border-radius: 50%; flex: 0 0 11px; }
   .finding.benign .dot { background: var(--benign); }
   .finding.malignant .dot { background: var(--malignant); }
+  .finding.uncertain .dot { background: var(--warn); }
   .finding .txt { flex: 1 1 auto; min-width: 0; }
   .finding .lbl { display: block; font-size: 1.22rem; font-weight: 700; line-height: 1.2; }
   .finding.benign .lbl, .finding.benign .pct { color: var(--benign); }
   .finding.malignant .lbl, .finding.malignant .pct { color: var(--malignant); }
+  .finding.uncertain .lbl, .finding.uncertain .pct { color: var(--warn); }
   .finding .sub { display: block; font-size: 0.74rem; color: var(--muted); }
   .finding .pct { font-family: var(--mono); font-size: 1.4rem; font-weight: 700; }
 
@@ -398,12 +403,14 @@
 
         <div class="mag">
           <label class="field" for="magnification">Magnification</label>
-          <select id="magnification" name="magnification">
+          <select id="magnification" name="magnification" aria-describedby="magnification-hint">
+            <option value="auto" selected>Auto-detect (recommended)</option>
             <option value="40">40× — low power</option>
             <option value="100">100×</option>
             <option value="200">200×</option>
             <option value="400">400× — high power</option>
           </select>
+          <span class="hint" id="magnification-hint">Each magnification has its own model, and a result from the wrong one isn't meaningful. Auto-detect reads the zoom from the image; choose one only if you know the magnification it was captured at.</span>
         </div>
 
         <button type="submit" class="analyze" id="submit-btn" disabled>Analyse specimen</button>
@@ -446,6 +453,7 @@
             </span>
             <span class="pct" id="result-confidence"></span>
           </div>
+          <div class="notice mag-warning" id="mag-warning" role="status"></div>
 
           <div class="probs">
             <div class="prob-row">
@@ -619,9 +627,16 @@
     const benignP = 1 - malignantP;
     const shown = data.label === "malignant" ? malignantP : benignP;
 
-    finding.className = "finding " + data.label;
-    resultLabel.textContent = DISPLAY_LABEL[data.label] || data.label;
-    resultSub.textContent = SUB_TEXT[data.label] || "";
+    if (data.uncertain) {
+      finding.className = "finding uncertain";
+      resultLabel.textContent = "Uncertain — leans " + (data.label === "malignant" ? "malignant" : "benign");
+      resultSub.textContent =
+        "Borderline result: at this confidence the model is right only about 2 times in 3. Needs expert review.";
+    } else {
+      finding.className = "finding " + data.label;
+      resultLabel.textContent = DISPLAY_LABEL[data.label] || data.label;
+      resultSub.textContent = SUB_TEXT[data.label] || "";
+    }
     resultConfidence.textContent = (shown * 100).toFixed(1) + "%";
 
     document.getElementById("bar-benign").style.width = (benignP * 100).toFixed(1) + "%";
@@ -629,7 +644,14 @@
     document.getElementById("val-benign").textContent = (benignP * 100).toFixed(1) + "%";
     document.getElementById("val-malignant").textContent = (malignantP * 100).toFixed(1) + "%";
 
-    document.getElementById("kv-mag").textContent = data.magnification + "×";
+    document.getElementById("kv-mag").textContent =
+      data.magnification + "× " +
+      (data.magnification_source === "detected"
+        ? "(detected, " + Math.round(data.detected_magnification_confidence * 100) + "%)"
+        : "(selected)");
+    const magWarning = document.getElementById("mag-warning");
+    magWarning.textContent = data.magnification_warning || "";
+    magWarning.style.display = data.magnification_warning ? "block" : "none";
     document.getElementById("kv-model").textContent = data.model_magnification
       ? data.model_magnification + "× model"
       : "default model (no " + data.magnification + "× model deployed)";
@@ -638,7 +660,8 @@
     resultOverlay.src = "data:image/png;base64," + data.gradcam_overlay_base64;
 
     setStage(1, "ok", "Valid histology");
-    setStage(2, data.label === "malignant" ? "fail" : "ok", DISPLAY_LABEL[data.label]);
+    if (data.uncertain) setStage(2, "skip", "Uncertain");
+    else setStage(2, data.label === "malignant" ? "fail" : "ok", DISPLAY_LABEL[data.label]);
 
     if (data.label !== "malignant") {
       subtypeSection.style.display = "none";

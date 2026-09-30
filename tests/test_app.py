@@ -27,6 +27,10 @@ def _isolate_checkpoint_dir(monkeypatch, tmp_path):
     monkeypatch.setattr("src.serving.app.CHECKPOINT_DIR", empty)
     # Likewise stage 1's feature-distance screen: tests that exercise it opt in.
     monkeypatch.setattr("src.serving.app.HISTOLOGY_SCREEN_PATH", str(tmp_path / "no_screen.pt"))
+    # And magnification detection.
+    monkeypatch.setattr(
+        "src.serving.app.MAGNIFICATION_DETECTOR_PATH", str(tmp_path / "no_detector.pt")
+    )
 
 
 def _make_forced_binary_checkpoint(tmp_path, force_malignant: bool):
@@ -544,3 +548,136 @@ def test_familiar_image_passes_the_feature_screen(monkeypatch, tmp_path):
 
     assert resp.status_code == 200
     assert screen.seen == 1
+
+
+def _make_coin_toss_checkpoint(tmp_path):
+    """A model whose output is always exactly 50% malignant."""
+    model = BreakHisClassifier(pretrained=False)
+    with torch.no_grad():
+        model.backbone.fc.weight.zero_()
+        model.backbone.fc.bias.zero_()
+    path = tmp_path / "coin_toss.pt"
+    save_checkpoint(path, model, optim.Adam(model.parameters()), epoch=0, metrics={})
+    return path
+
+
+def test_borderline_probability_is_reported_as_uncertain(monkeypatch, tmp_path):
+    get_model.cache_clear()
+    monkeypatch.setattr("src.serving.app.CHECKPOINT_PATH", str(_make_coin_toss_checkpoint(tmp_path)))
+    monkeypatch.setattr("src.serving.app.SUBTYPE_CHECKPOINT_PATH", "nonexistent_subtype.pt")
+
+    body = _post_image(_fake_histology_bytes()).json()
+
+    assert body["probability"] == pytest.approx(0.5)
+    assert body["uncertain"] is True
+
+
+@pytest.mark.parametrize("force_malignant", [True, False])
+def test_confident_probability_is_not_uncertain(monkeypatch, tmp_path, force_malignant):
+    get_model.cache_clear()
+    checkpoint = _make_forced_binary_checkpoint(tmp_path, force_malignant=force_malignant)
+    monkeypatch.setattr("src.serving.app.CHECKPOINT_PATH", str(checkpoint))
+    monkeypatch.setattr("src.serving.app.SUBTYPE_CHECKPOINT_PATH", "nonexistent_subtype.pt")
+
+    assert _post_image(_fake_histology_bytes()).json()["uncertain"] is False
+
+
+class _StubDetector:
+    def __init__(self, magnification, confidence):
+        self.result = (magnification, confidence)
+        self.seen = 0
+
+    def detect(self, image):
+        self.seen += 1
+        return self.result
+
+
+def _with_200x_malignant_model(monkeypatch, tmp_path):
+    """Default model says benign; a 200x model says malignant."""
+    default = _make_forced_binary_checkpoint(tmp_path, force_malignant=False)
+    mag_dir = tmp_path / "mags"
+    mag_dir.mkdir()
+    _make_forced_binary_checkpoint(mag_dir, force_malignant=True).rename(mag_dir / "best_mag200.pt")
+    get_model.cache_clear()
+    monkeypatch.setattr("src.serving.app.CHECKPOINT_PATH", str(default))
+    monkeypatch.setattr("src.serving.app.CHECKPOINT_DIR", mag_dir)
+    monkeypatch.setattr("src.serving.app.SUBTYPE_CHECKPOINT_PATH", "nonexistent_subtype.pt")
+
+
+def _use_detector(monkeypatch, detector):
+    monkeypatch.setattr("src.serving.app.load_magnification_detector", lambda path: detector)
+
+
+def test_auto_uses_the_model_for_the_detected_magnification(monkeypatch, tmp_path):
+    _with_200x_malignant_model(monkeypatch, tmp_path)
+    _use_detector(monkeypatch, _StubDetector("200", 0.98))
+
+    body = _post_image(_fake_histology_bytes(), magnification="auto").json()
+
+    assert body["label"] == "malignant"
+    assert body["model_magnification"] == "200"
+    assert body["magnification"] == "200"
+    assert body["magnification_source"] == "detected"
+    assert body["detected_magnification_confidence"] == pytest.approx(0.98)
+    assert body["magnification_warning"] is None
+
+
+def test_auto_is_the_default(monkeypatch, tmp_path):
+    _with_200x_malignant_model(monkeypatch, tmp_path)
+    _use_detector(monkeypatch, _StubDetector("200", 0.98))
+
+    resp = client.post("/predict", files={"file": ("s.png", _fake_histology_bytes(), "image/png")})
+
+    assert resp.json()["magnification_source"] == "detected"
+
+
+def test_unsure_detection_is_used_but_flagged(monkeypatch, tmp_path):
+    _with_200x_malignant_model(monkeypatch, tmp_path)
+    _use_detector(monkeypatch, _StubDetector("200", 0.55))
+
+    body = _post_image(_fake_histology_bytes(), magnification="auto").json()
+
+    assert body["model_magnification"] == "200"
+    assert "Unsure" in body["magnification_warning"]
+
+
+def test_auto_without_a_detector_asks_for_the_magnification(monkeypatch, tmp_path):
+    _with_200x_malignant_model(monkeypatch, tmp_path)
+    _use_detector(monkeypatch, None)
+
+    resp = _post_image(_fake_histology_bytes(), magnification="auto")
+
+    assert resp.status_code == 400
+    assert "choose the magnification" in resp.json()["detail"]
+
+
+def test_selected_magnification_that_the_image_contradicts_is_warned_about(monkeypatch, tmp_path):
+    _with_200x_malignant_model(monkeypatch, tmp_path)
+    _use_detector(monkeypatch, _StubDetector("200", 0.97))
+
+    body = _post_image(_fake_histology_bytes(), magnification="40").json()
+
+    assert body["magnification"] == "40"  # the user's choice still stands
+    assert body["magnification_source"] == "selected"
+    assert body["detected_magnification"] == "200"
+    assert "looks like 200×" in body["magnification_warning"]
+
+
+def test_selected_magnification_that_matches_the_image_has_no_warning(monkeypatch, tmp_path):
+    _with_200x_malignant_model(monkeypatch, tmp_path)
+    _use_detector(monkeypatch, _StubDetector("200", 0.97))
+
+    body = _post_image(_fake_histology_bytes(), magnification="200").json()
+
+    assert body["magnification_warning"] is None
+
+
+def test_magnification_is_not_detected_for_a_rejected_image(monkeypatch, tmp_path):
+    _with_200x_malignant_model(monkeypatch, tmp_path)
+    detector = _StubDetector("200", 0.97)
+    _use_detector(monkeypatch, detector)
+
+    resp = _post_image(_fake_photo_bytes(), magnification="auto")
+
+    assert resp.status_code == 422
+    assert detector.seen == 0
