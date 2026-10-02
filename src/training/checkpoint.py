@@ -1,14 +1,14 @@
 """Model checkpoint save/load helpers."""
 
 from pathlib import Path
-from typing import Optional, Tuple, Union
+from typing import Tuple
 
 import torch
 from torch import nn, optim
 
 
 def save_checkpoint(
-    path: Union[str, Path], model: nn.Module, optimizer: optim.Optimizer, epoch: int, metrics: dict
+    path: str | Path, model: nn.Module, optimizer: optim.Optimizer, epoch: int, metrics: dict
 ) -> None:
     torch.save(
         {
@@ -22,9 +22,9 @@ def save_checkpoint(
 
 
 def load_checkpoint(
-    path: Union[str, Path],
+    path: str | Path,
     model: nn.Module,
-    optimizer: Optional[optim.Optimizer] = None,
+    optimizer: optim.Optimizer | None = None,
     map_location: str = "cpu",
 ) -> Tuple[int, dict]:
     checkpoint = torch.load(path, map_location=map_location, weights_only=True)
@@ -34,7 +34,7 @@ def load_checkpoint(
     return checkpoint["epoch"], checkpoint["metrics"]
 
 
-def checkpoint_stain_normalization(path: Union[str, Path]) -> Optional[str]:
+def checkpoint_stain_normalization(path: str | Path) -> str | None:
     """The stain normalization a checkpoint was trained with, or None for raw images."""
     checkpoint = torch.load(path, map_location="cpu", weights_only=True)
     return (checkpoint.get("metrics") or {}).get("stain_normalization")

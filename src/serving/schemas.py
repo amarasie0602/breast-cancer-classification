@@ -1,6 +1,5 @@
 """Request/response schemas for the inference API."""
 
-from typing import Optional
 
 from pydantic import BaseModel
 
@@ -16,20 +15,20 @@ class PredictionResponse(BaseModel):
     # "detected" when the magnification came from the image, "selected" when
     # the request named one.
     magnification_source: str = "selected"
-    detected_magnification: Optional[str] = None
-    detected_magnification_confidence: Optional[float] = None
+    detected_magnification: str | None = None
+    detected_magnification_confidence: float | None = None
     # Set when the detected magnification is unsure, or confidently disagrees
     # with the one selected.
-    magnification_warning: Optional[str] = None
+    magnification_warning: str | None = None
     # Magnification of the model that actually ran, or None when no
     # magnification-matched checkpoint was available and serving fell back to
     # its default model. Lets the UI say plainly when those differ.
-    model_magnification: Optional[str] = None
+    model_magnification: str | None = None
     gradcam_overlay_base64: str
-    subtype: Optional[str] = None  # e.g. "ductal_carcinoma"; only set when label == "malignant"
-    subtype_display_name: Optional[str] = None  # e.g. "Invasive Ductal Carcinoma (IDC)"
-    subtype_confidence: Optional[float] = None
+    subtype: str | None = None  # e.g. "ductal_carcinoma"; only set when label == "malignant"
+    subtype_display_name: str | None = None  # e.g. "Invasive Ductal Carcinoma (IDC)"
+    subtype_confidence: float | None = None
     # Set when the malignant branch ran but no trustworthy subtype model
     # was available, so the UI can explain the absence instead of just
     # silently omitting stage 3.
-    subtype_unavailable_reason: Optional[str] = None
+    subtype_unavailable_reason: str | None = None

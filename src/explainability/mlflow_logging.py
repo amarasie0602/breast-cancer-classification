@@ -2,7 +2,7 @@
 
 import tempfile
 from pathlib import Path
-from typing import Optional, Sequence
+from typing import Sequence
 
 from matplotlib.figure import Figure
 from PIL import Image
@@ -17,8 +17,8 @@ def log_gradcam_batch(
     target_layer: nn.Module,
     images: Sequence[Image.Image],
     tensors: Sequence[Tensor],
-    labels: Optional[Sequence] = None,
-    preds: Optional[Sequence] = None,
+    labels: Sequence | None = None,
+    preds: Sequence | None = None,
     artifact_path: str = "gradcam",
 ) -> Figure:
     import mlflow

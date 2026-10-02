@@ -2,7 +2,7 @@
 
 import argparse
 from pathlib import Path
-from typing import Tuple, Union
+from typing import Tuple
 
 import yaml
 from torch import nn, optim
@@ -23,7 +23,7 @@ from src.training.loop import evaluate, train_one_epoch
 NUM_WORKERS = 0
 
 
-def within_project(path: Union[str, Path], what: str) -> Path:
+def within_project(path: str | Path, what: str) -> Path:
     """Resolve a command-line path, refusing anything outside the project
     directory (the current working directory)."""
     resolved = Path(path).resolve()
@@ -32,7 +32,7 @@ def within_project(path: Union[str, Path], what: str) -> Path:
     return resolved
 
 
-def load_config(path: Union[str, Path]) -> dict:
+def load_config(path: str | Path) -> dict:
     with open(within_project(path, "config path")) as f:
         return yaml.safe_load(f)
 
@@ -46,7 +46,7 @@ def _checkpoint_metrics(val_metrics: dict, stain_normalization) -> dict:
 
 
 def build_dataloaders(
-    data_root: Union[str, Path],
+    data_root: str | Path,
     magnification: str,
     split_ratios: Tuple[float, float, float],
     seed: int,
@@ -95,7 +95,7 @@ def build_dataloaders(
 
 def run_training(
     config: dict,
-    data_root: Union[str, Path],
+    data_root: str | Path,
     magnification: str,
     split_ratios: Tuple[float, float, float] = (0.7, 0.15, 0.15),
     seed: int = 42,

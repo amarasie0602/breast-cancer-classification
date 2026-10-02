@@ -10,7 +10,7 @@ matching model (scripts/train_magnification.py trains the detector).
 import logging
 from functools import lru_cache
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Tuple
 
 import torch
 from PIL import Image
@@ -52,7 +52,7 @@ class MagnificationDetector:
 
 
 @lru_cache(maxsize=2)
-def load_magnification_detector(weights_path: str) -> Optional[MagnificationDetector]:
+def load_magnification_detector(weights_path: str) -> MagnificationDetector | None:
     """The trained detector, or None if it isn't there or can't be read
     (e.g. a Git LFS pointer in a checkout without LFS)."""
     if not Path(weights_path).is_file():

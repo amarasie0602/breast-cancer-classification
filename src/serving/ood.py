@@ -22,7 +22,7 @@ import logging
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import List, Optional, Union
+from typing import List
 
 import numpy as np
 import torch
@@ -73,7 +73,7 @@ class FeatureDistance:
             self.mean, self.components, self.variances, self.residual_variance, float(threshold)
         )
 
-    def save(self, path: Union[str, Path]) -> None:
+    def save(self, path: str | Path) -> None:
         np.savez(
             path,
             mean=self.mean.astype(np.float32),
@@ -84,7 +84,7 @@ class FeatureDistance:
         )
 
     @classmethod
-    def load(cls, path: Union[str, Path]) -> "FeatureDistance":
+    def load(cls, path: str | Path) -> "FeatureDistance":
         with np.load(path) as data:
             return cls(
                 mean=data["mean"].astype(np.float64),
@@ -95,7 +95,7 @@ class FeatureDistance:
             )
 
 
-def stats_path_for(weights_path: Union[str, Path]) -> Path:
+def stats_path_for(weights_path: str | Path) -> Path:
     """histology_screen.pt -> histology_screen.ood.npz, beside the weights."""
     return Path(weights_path).with_suffix(".ood.npz")
 
@@ -103,13 +103,13 @@ def stats_path_for(weights_path: Union[str, Path]) -> Path:
 class HistologyScreen:
     """A feature extractor plus the fitted distance that decides what's familiar."""
 
-    def __init__(self, network: nn.Module, distance: Optional[FeatureDistance] = None):
+    def __init__(self, network: nn.Module, distance: FeatureDistance | None = None):
         self.network = network.eval()
         self.distance = distance
         self._transform = eval_transform()
 
     @classmethod
-    def load(cls, weights_path: Union[str, Path]) -> "HistologyScreen":
+    def load(cls, weights_path: str | Path) -> "HistologyScreen":
         network = efficientnet_b0(weights=None)
         network.classifier = nn.Identity()
         network.load_state_dict(torch.load(weights_path, map_location="cpu", weights_only=True))
@@ -125,7 +125,7 @@ class HistologyScreen:
 
 
 @lru_cache(maxsize=2)
-def load_histology_screen(weights_path: str) -> Optional[HistologyScreen]:
+def load_histology_screen(weights_path: str) -> HistologyScreen | None:
     """The fitted screen, or None if it hasn't been fitted or can't be read
     (e.g. a Git LFS pointer in a checkout without LFS)."""
     if not (Path(weights_path).is_file() and stats_path_for(weights_path).is_file()):

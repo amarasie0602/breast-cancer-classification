@@ -1,6 +1,5 @@
 """Grad-CAM for visualizing which regions of a histology image drove a prediction."""
 
-from typing import Optional
 
 import torch.nn.functional as F
 from torch import Tensor, nn
@@ -12,8 +11,8 @@ class GradCAM:
     def __init__(self, model: nn.Module, target_layer: nn.Module):
         self.model = model
         self.target_layer = target_layer
-        self.activations: Optional[Tensor] = None
-        self.gradients: Optional[Tensor] = None
+        self.activations: Tensor | None = None
+        self.gradients: Tensor | None = None
 
         self._handles = [
             target_layer.register_forward_hook(self._save_activations),
@@ -37,7 +36,7 @@ class GradCAM:
     def _save_gradients(self, module, grad_input, grad_output) -> None:
         self.gradients = grad_output[0].detach()
 
-    def __call__(self, input_tensor: Tensor, target_class: Optional[int] = None) -> Tensor:
+    def __call__(self, input_tensor: Tensor, target_class: int | None = None) -> Tensor:
         self.model.zero_grad()
         logits = self.model(input_tensor)
 

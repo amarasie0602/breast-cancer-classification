@@ -15,7 +15,6 @@ the app keeps serving the previous model.
 """
 
 from pathlib import Path
-from typing import Union
 
 import torch
 
@@ -40,7 +39,7 @@ OUTPUT_DIR = REPO_ROOT / "serving_checkpoints"
 SERVING_KEYS = ("epoch", "model_state", "metrics")
 
 
-def export_serving_checkpoint(source: Union[str, Path], destination: Union[str, Path]) -> None:
+def export_serving_checkpoint(source: str | Path, destination: str | Path) -> None:
     checkpoint = torch.load(source, map_location="cpu", weights_only=True)
     missing = [key for key in SERVING_KEYS if key not in checkpoint]
     if missing:
