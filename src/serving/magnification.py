@@ -10,7 +10,7 @@ matching model (scripts/train_magnification.py trains the detector).
 import logging
 from functools import lru_cache
 from pathlib import Path
-from typing import Optional, Tuple, Union
+from typing import Optional, Tuple
 
 import torch
 from PIL import Image
@@ -38,7 +38,7 @@ class MagnificationDetector:
         self._transform = eval_transform()
 
     @classmethod
-    def load(cls, weights_path: Union[str, Path]) -> "MagnificationDetector":
+    def load(cls, weights_path: str | Path) -> "MagnificationDetector":
         network = build_network()
         network.load_state_dict(torch.load(weights_path, map_location="cpu", weights_only=True))
         return cls(network)

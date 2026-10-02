@@ -453,7 +453,7 @@
             </span>
             <span class="pct" id="result-confidence"></span>
           </div>
-          <div class="notice mag-warning" id="mag-warning" role="status"></div>
+          <output class="notice mag-warning" id="mag-warning"></output>
 
           <div class="probs">
             <div class="prob-row">
@@ -622,47 +622,35 @@
     if (file) selectFile(file);
   });
 
-  function renderReport(data) {
-    const malignantP = data.probability;
-    const benignP = 1 - malignantP;
-    const shown = data.label === "malignant" ? malignantP : benignP;
-
+  function renderFinding(data) {
     if (data.uncertain) {
       finding.className = "finding uncertain";
       resultLabel.textContent = "Uncertain — leans " + (data.label === "malignant" ? "malignant" : "benign");
       resultSub.textContent =
         "Borderline result: at this confidence the model is right only about 2 times in 3. Needs expert review.";
+      setStage(2, "skip", "Uncertain");
     } else {
       finding.className = "finding " + data.label;
       resultLabel.textContent = DISPLAY_LABEL[data.label] || data.label;
       resultSub.textContent = SUB_TEXT[data.label] || "";
+      setStage(2, data.label === "malignant" ? "fail" : "ok", DISPLAY_LABEL[data.label]);
     }
-    resultConfidence.textContent = (shown * 100).toFixed(1) + "%";
+  }
 
-    document.getElementById("bar-benign").style.width = (benignP * 100).toFixed(1) + "%";
-    document.getElementById("bar-malignant").style.width = (malignantP * 100).toFixed(1) + "%";
-    document.getElementById("val-benign").textContent = (benignP * 100).toFixed(1) + "%";
-    document.getElementById("val-malignant").textContent = (malignantP * 100).toFixed(1) + "%";
-
-    document.getElementById("kv-mag").textContent =
-      data.magnification + "× " +
-      (data.magnification_source === "detected"
-        ? "(detected, " + Math.round(data.detected_magnification_confidence * 100) + "%)"
-        : "(selected)");
+  function renderMagnification(data) {
+    const how = data.magnification_source === "detected"
+      ? "(detected, " + Math.round(data.detected_magnification_confidence * 100) + "%)"
+      : "(selected)";
+    document.getElementById("kv-mag").textContent = data.magnification + "× " + how;
     const magWarning = document.getElementById("mag-warning");
     magWarning.textContent = data.magnification_warning || "";
     magWarning.style.display = data.magnification_warning ? "block" : "none";
     document.getElementById("kv-model").textContent = data.model_magnification
       ? data.model_magnification + "× model"
       : "default model (no " + data.magnification + "× model deployed)";
-    document.getElementById("kv-file").textContent = selectedFile ? selectedFile.name : "—";
+  }
 
-    resultOverlay.src = "data:image/png;base64," + data.gradcam_overlay_base64;
-
-    setStage(1, "ok", "Valid histology");
-    if (data.uncertain) setStage(2, "skip", "Uncertain");
-    else setStage(2, data.label === "malignant" ? "fail" : "ok", DISPLAY_LABEL[data.label]);
-
+  function renderSubtype(data) {
     if (data.label !== "malignant") {
       subtypeSection.style.display = "none";
       setStage(3, "idle", "Not applicable");
@@ -683,6 +671,25 @@
       subtypeSection.style.display = "none";
       setStage(3, "idle", "Unavailable");
     }
+  }
+
+  function renderReport(data) {
+    const malignantP = data.probability;
+    const benignP = 1 - malignantP;
+    const shown = data.label === "malignant" ? malignantP : benignP;
+
+    setStage(1, "ok", "Valid histology");
+    renderFinding(data);
+    resultConfidence.textContent = (shown * 100).toFixed(1) + "%";
+    document.getElementById("bar-benign").style.width = (benignP * 100).toFixed(1) + "%";
+    document.getElementById("bar-malignant").style.width = (malignantP * 100).toFixed(1) + "%";
+    document.getElementById("val-benign").textContent = (benignP * 100).toFixed(1) + "%";
+    document.getElementById("val-malignant").textContent = (malignantP * 100).toFixed(1) + "%";
+
+    renderMagnification(data);
+    document.getElementById("kv-file").textContent = selectedFile ? selectedFile.name : "—";
+    resultOverlay.src = "data:image/png;base64," + data.gradcam_overlay_base64;
+    renderSubtype(data);
 
     showResults(true);
     scrollHint.style.display = "inline-block";
