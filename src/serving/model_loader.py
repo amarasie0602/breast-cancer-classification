@@ -1,7 +1,6 @@
 """Load a trained checkpoint for inference, cached across requests."""
 
 from functools import lru_cache
-from typing import Optional
 
 import torch
 
@@ -63,7 +62,7 @@ def subtype_checkpoint_scheme(checkpoint_path: str) -> str:
 
 
 @lru_cache(maxsize=8)
-def binary_checkpoint_stain_normalization(checkpoint_path: str) -> Optional[str]:
+def binary_checkpoint_stain_normalization(checkpoint_path: str) -> str | None:
     """The stain normalization a binary model was trained with (None = raw
     images), so serving can prepare an upload the same way."""
     return checkpoint_stain_normalization(checkpoint_path)

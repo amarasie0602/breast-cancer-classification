@@ -1,13 +1,12 @@
 """Early stopping on a monitored metric that should decrease (e.g. val loss)."""
 
-from typing import Optional
 
 
 class EarlyStopping:
     def __init__(self, patience: int = 5, min_delta: float = 0.0):
         self.patience = patience
         self.min_delta = min_delta
-        self.best_score: Optional[float] = None
+        self.best_score: float | None = None
         self.num_bad_epochs = 0
 
     def step(self, score: float) -> bool:

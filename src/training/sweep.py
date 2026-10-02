@@ -3,13 +3,13 @@
 import argparse
 import copy
 from pathlib import Path
-from typing import List, Union
+from typing import List
 
 from src.training.train import load_config, run_training
 
 
 def run_sweep(
-    base_config: dict, data_root: Union[str, Path], magnification: str, variants: List[dict], **kwargs
+    base_config: dict, data_root: str | Path, magnification: str, variants: List[dict], **kwargs
 ) -> List[dict]:
     """variants: list of dicts of config overrides, one per run."""
     results = []

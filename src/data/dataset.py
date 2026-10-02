@@ -6,7 +6,7 @@ Expects the standard BreaKHis_v1 directory layout:
 """
 
 from pathlib import Path
-from typing import Callable, Optional, Union
+from typing import Callable
 
 from PIL import Image
 from torch.utils.data import Dataset
@@ -70,9 +70,9 @@ DEFAULT_SUBTYPE_SCHEME = "four_subtypes"
 class BreakHisDataset(Dataset):
     def __init__(
         self,
-        root: Union[str, Path],
-        magnification: Optional[Union[str, int]] = None,
-        transform: Optional[Callable] = None,
+        root: str | Path,
+        magnification: str | int | None = None,
+        transform: Callable | None = None,
     ):
         self.root = Path(root)
         self.magnification = str(magnification) if magnification else None
@@ -133,9 +133,9 @@ class BreakHisSubtypeDataset(Dataset):
 
     def __init__(
         self,
-        root: Union[str, Path],
-        magnification: Optional[Union[str, int]] = None,
-        transform: Optional[Callable] = None,
+        root: str | Path,
+        magnification: str | int | None = None,
+        transform: Callable | None = None,
         scheme: str = DEFAULT_SUBTYPE_SCHEME,
     ):
         if scheme not in SUBTYPE_SCHEMES:

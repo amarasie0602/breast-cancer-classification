@@ -14,7 +14,6 @@ image (and therefore no particular patient or split) defines the target.
 """
 
 from pathlib import Path
-from typing import Optional, Union
 
 import numpy as np
 from PIL import Image
@@ -108,7 +107,7 @@ def stain_marker_name(method: str) -> str:
     return f"STAIN_NORMALIZATION.{method}"
 
 
-def dataset_stain_normalization(root: Union[str, Path]) -> Optional[str]:
+def dataset_stain_normalization(root: str | Path) -> str | None:
     """The stain normalization a dataset copy was built with, or None for raw data."""
     for method in KNOWN_STAIN_NORMALIZATIONS:
         if (Path(root) / stain_marker_name(method)).is_file():
@@ -116,7 +115,7 @@ def dataset_stain_normalization(root: Union[str, Path]) -> Optional[str]:
     return None
 
 
-def require_stain_normalization(data_root: Union[str, Path], expected: Optional[str]) -> None:
+def require_stain_normalization(data_root: str | Path, expected: str | None) -> None:
     """Raise if ``data_root`` isn't in the colour space ``expected`` (None = raw)."""
     actual = dataset_stain_normalization(data_root)
     if actual != expected:

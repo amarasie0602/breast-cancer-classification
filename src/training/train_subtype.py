@@ -14,7 +14,7 @@ deliberate, documented departure, not an oversight.
 
 import argparse
 from pathlib import Path
-from typing import Tuple, Union
+from typing import Tuple
 
 from torch import nn, optim
 from torch.utils.data import DataLoader, WeightedRandomSampler
@@ -29,7 +29,7 @@ from src.training.subtype_loop import evaluate, train_one_epoch
 from src.training.train import NUM_WORKERS, load_config
 
 def build_dataloaders(
-    data_root: Union[str, Path],
+    data_root: str | Path,
     split_ratios: Tuple[float, float, float],
     seed: int,
     batch_size: int,
@@ -78,7 +78,7 @@ def _class_weights(samples: list, num_classes: int) -> list:
 
 def run_training(
     config: dict,
-    data_root: Union[str, Path],
+    data_root: str | Path,
     split_ratios: Tuple[float, float, float] = (0.7, 0.15, 0.15),
     seed: int = 42,
     device: str = "cpu",
