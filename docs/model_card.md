@@ -332,12 +332,35 @@ cancers caught either way; 175 vs 176 of 306 benign images cleared).
 ### Borderline results are reported as uncertain
 
 A 52%-malignant result used to be shown in the same red box as a 99% one.
-Between 0.2 and 0.8 malignant probability the served models are right 68%
-of the time on validation images, against 94% outside it, so that band is
-reported as "Uncertain" (leaning benign or malignant) instead of as a
-finding. On the held-out test images, 12% fall in the band and 59% of those
-are right, against 88% outside it; a third of all wrong predictions (53 of
-163) are now flagged rather than stated.
+Probabilities between 0.2 and 0.8 are now reported as "Uncertain" (leaning
+benign or malignant) instead of as a finding. With the calibration below,
+the served models are right 69% of the time inside that band and 95%
+outside it on the validation images; on the held-out test images, 61%
+against 89%. 15.8% of test images fall in the band, and 67 of the 163 wrong
+test predictions are flagged there rather than stated.
+
+### Probabilities are calibrated; test-time augmentation is not used
+
+The raw probabilities were over-confident: validation images scored 70-80%
+malignant were right about 64% of the time. One temperature per
+magnification, fitted on validation logits (`scripts/calibrate_serving.py`;
+T = 1.28, 1.64, 1.78 and 0.99 for 40x-400x), rescales them. That never
+moves an image across the 0.5 threshold, so no label changes. Expected
+calibration error falls for all four models on validation; on the held-out
+test images it falls for 40x (0.143 to 0.136) and 100x (0.153 to 0.128),
+the two worst, and stays about the same for 200x and 400x. The temperatures
+are tied to each checkpoint's SHA-256, and a test fails if a model changes
+without recalibrating.
+
+Averaging over each image's 8 rotations and flips (test-time augmentation)
+was also tried. The rule, written before running, adopted it if validation
+balanced accuracy rose with sensitivity down at most one point, and it
+"passed" on a 0.3-point rise (89.1% to 89.4%). The held-out test set moved
+the other way (76.6% to 75.1%; benign specificity 57.5% to 53.6%), at 8x the
+inference cost. A 0.3-point change on ~1,400 images is noise, and the rule
+had no minimum, so it now requires a one-point gain and TTA is not used.
+That is a change made after seeing a test result, and is recorded here for
+that reason.
 
 ### Threshold tuning was tried, and rejected
 
