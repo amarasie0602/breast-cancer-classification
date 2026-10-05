@@ -17,12 +17,16 @@ versioning, automated testing, containerized serving, and CI/CD.
    37 photos and screenshots tried ([numbers](docs/model_card.md#limitations)).
 2. **Benign vs. malignant** classification (binary), by the model for the
    image's magnification, which is detected from the image by default.
-   Borderline probabilities (0.2-0.8) are reported as "Uncertain" rather
-   than as a finding.
+   Probabilities are calibrated, and borderline ones (0.2-0.8) are reported
+   as "Uncertain" rather than as a finding.
 3. **Malignant subtype** classification (Invasive Ductal Carcinoma,
    Invasive Lobular Carcinoma, Mucinous Carcinoma, or Papillary Carcinoma —
    the four subtypes BreakHis actually labels), only run when stage 2
    predicts malignant. **Currently gated off**, see below.
+
+The web page also takes several images from one case (each analysed and
+listed with its result; deliberately no combined verdict, since 11 test
+patients can't validate one) and saves any report as a one-page PDF.
 
 ### Stage 3 reports no subtype, on purpose
 
