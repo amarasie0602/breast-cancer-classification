@@ -23,6 +23,7 @@ def _isolate_checkpoint_dir(monkeypatch, tmp_path):
     monkeypatch.setattr(
         "src.serving.app.MAGNIFICATION_DETECTOR_PATH", str(tmp_path / "no_detector.pt")
     )
+    monkeypatch.setattr("src.serving.app.CALIBRATION_PATH", str(tmp_path / "no_calibration.json"))
 
 
 def test_health_response_has_latency_header():

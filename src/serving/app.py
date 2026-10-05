@@ -2,12 +2,17 @@
 
 import base64
 import io
+import logging
 import os
+import threading
+import time
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated, Dict
 
 import torch
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 from PIL import Image
 
@@ -16,6 +21,7 @@ from src.data.stain import MACENKO, StainNormalize
 from src.data.transforms import eval_transform
 from src.explainability.gradcam import GradCAM
 from src.explainability.overlay import cam_to_overlay
+from src.serving.calibration import dihedral_views, load_calibration
 from src.serving.input_guard import looks_like_histology
 from src.serving.logging_middleware import RequestLoggingMiddleware
 from src.serving.magnification import load_magnification_detector
@@ -30,7 +36,19 @@ from src.serving.model_loader import (
 )
 from src.serving.schemas import PredictionResponse
 
-app = FastAPI(title="Breast Cancer Histopathology Classifier")
+logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    # Load every model before the first request instead of during it; set
+    # PRELOAD_MODELS=0 to skip (e.g. on a machine with little memory).
+    if os.environ.get("PRELOAD_MODELS", "1") != "0":
+        await run_in_threadpool(_preload_models)
+    yield
+
+
+app = FastAPI(title="Breast Cancer Histopathology Classifier", lifespan=lifespan)
 app.add_middleware(RequestLoggingMiddleware)
 
 # The app serves the weights-only copies in serving_checkpoints/, both locally
@@ -62,6 +80,9 @@ MIN_DETECTION_CONFIDENCE = float(os.environ.get("MIN_DETECTION_CONFIDENCE", "0.9
 HISTOLOGY_SCREEN_PATH = os.environ.get(
     "HISTOLOGY_SCREEN_PATH", "serving_checkpoints/histology_screen.pt"
 )
+# Test-time augmentation and per-model temperatures (src/serving/calibration.py);
+# without the file the plain model output is used.
+CALIBRATION_PATH = os.environ.get("CALIBRATION_PATH", "serving_checkpoints/calibration.json")
 SUBTYPE_CHECKPOINT_PATH = os.environ.get(
     "SUBTYPE_CHECKPOINT_PATH", "serving_checkpoints/best_subtype.pt"
 )
@@ -83,10 +104,12 @@ MAX_IMAGE_PIXELS = 40_000_000
 # whole curve to inform it.
 DECISION_THRESHOLD = float(os.environ.get("DECISION_THRESHOLD", "0.5"))
 
-# Probabilities in this band are reported as uncertain. Measured on the 1,388
-# validation images: inside 0.2-0.8 (15% of images) the served models are
-# right 68% of the time, outside it 94%. A 52%-malignant result shown in the
-# same red box as a 99% one reads as a diagnosis; it's closer to a coin toss.
+# Probabilities in this band are reported as uncertain. On the calibrated
+# probabilities (calibration.json), the served models are right 69% of the time
+# inside 0.2-0.8 and 95% outside it on the validation images; on the held-out
+# test images 61% vs 89%, with 67 of the 163 wrong predictions inside the band.
+# A 52%-malignant result shown in the same red box as a 99% one reads as a
+# diagnosis; it's closer to a coin toss.
 UNCERTAIN_BAND = (
     float(os.environ.get("UNCERTAIN_LOW", "0.2")),
     float(os.environ.get("UNCERTAIN_HIGH", "0.8")),
@@ -196,6 +219,34 @@ def _binary_checkpoint_for(magnification: str):
     return CHECKPOINT_PATH, None
 
 
+def _preload_models() -> None:
+    """Load and run every served model once, so the first request isn't the
+    one that pays for reading ~400 MB of weights from disk."""
+    started = time.perf_counter()
+    dummy = torch.zeros(1, 3, 224, 224)
+    calibration = load_calibration(CALIBRATION_PATH)
+    loaded = []
+    for magnification in ALLOWED_MAGNIFICATIONS:
+        checkpoint_path, _ = _binary_checkpoint_for(magnification)
+        if not os.path.exists(checkpoint_path):
+            continue
+        with torch.no_grad():
+            get_model(checkpoint_path)(dummy)
+        if calibration:
+            calibration.temperature_for(checkpoint_path)  # hashes the checkpoint once
+        loaded.append(f"{magnification}x")
+    blank = Image.new("RGB", (224, 224))
+    screen = load_histology_screen(HISTOLOGY_SCREEN_PATH)
+    if screen:
+        screen.features([blank])
+        loaded.append("histology screen")
+    detector = load_magnification_detector(MAGNIFICATION_DETECTOR_PATH)
+    if detector:
+        detector.detect(blank)
+        loaded.append("magnification detector")
+    logger.info("preloaded %s in %.1fs", ", ".join(loaded) or "nothing", time.perf_counter() - started)
+
+
 def _classify_subtype(tensor):
     """Stage 3. Returns (subtype, display_name, confidence) when a good
     enough model is available, a string explaining why not when there is a
@@ -261,6 +312,21 @@ async def predict(
             status_code=413,
             detail=f"File is larger than {MAX_UPLOAD_BYTES // (1024 * 1024)} MB",
         )
+    return await run_in_threadpool(_analyse, image_bytes, magnification)
+
+
+# One analysis at a time: Grad-CAM attaches hooks to the shared, cached model,
+# so two at once could mix up each other's heat maps. The work runs in a worker
+# thread, so the server keeps answering /health and page loads meanwhile.
+_INFERENCE_LOCK = threading.Lock()
+
+
+def _analyse(image_bytes: bytes, magnification: str) -> PredictionResponse:
+    with _INFERENCE_LOCK:
+        return _analyse_unlocked(image_bytes, magnification)
+
+
+def _analyse_unlocked(image_bytes: bytes, magnification: str) -> PredictionResponse:
     image = _decode_image(image_bytes)
 
     if not _is_histology(image):
@@ -294,9 +360,14 @@ async def predict(
         else raw_tensor
     )
 
+    calibration = load_calibration(CALIBRATION_PATH)
     with torch.no_grad():
-        logit = model(tensor)
-        probability = torch.sigmoid(logit).item()
+        if calibration and calibration.tta:
+            logit = model(dihedral_views(tensor).flatten(0, 1)).mean()
+        else:
+            logit = model(tensor)[0, 0]
+    temperature = calibration.temperature_for(checkpoint_path) if calibration else 1.0
+    probability = torch.sigmoid(logit / temperature).item()
 
     label = "malignant" if probability >= DECISION_THRESHOLD else "benign"
     record_prediction(label)

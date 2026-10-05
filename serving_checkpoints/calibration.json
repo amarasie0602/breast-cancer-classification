@@ -1,0 +1,21 @@
+{
+  "tta": false,
+  "models": {
+    "best_mag40.pt": {
+      "temperature": 1.2817439828964718,
+      "sha256": "efae267f382ed52cf238e8aaff39aa8c961c2b0e9988d4a17927daced06aa751"
+    },
+    "best_mag100.pt": {
+      "temperature": 1.6369290312277267,
+      "sha256": "13cf2bbb92b60abc0520402f6fd8af3beb198285a665da96c5697d1685a6f7a6"
+    },
+    "best_mag200.pt": {
+      "temperature": 1.7754001804559765,
+      "sha256": "3a6a771ab069ff380c97214bf2f4a80a983703941712a13b783167542174b401"
+    },
+    "best_mag400.pt": {
+      "temperature": 0.987228265060316,
+      "sha256": "0466647fab9a61fc07228b1af25480b9e73b3248ab61872867edac5ff4e2f363"
+    }
+  }
+}

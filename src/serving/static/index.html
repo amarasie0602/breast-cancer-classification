@@ -322,6 +322,34 @@
     text-decoration: none;
   }
   .scroll-hint:hover { text-decoration: underline; }
+  .report-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  .report-btn {
+    margin-top: 10px; padding: 5px 12px;
+    font: inherit; font-size: 0.74rem; font-weight: 600;
+    color: var(--clinical); background: var(--clinical-soft);
+    border: 1px solid var(--clinical); border-radius: 6px; cursor: pointer;
+  }
+  .report-btn:hover { background: var(--panel-alt); }
+  .print-only { display: none; }
+
+  #case-card { margin-top: 14px; }
+  .case-totals { margin: 0 0 8px; font-weight: 600; font-size: 0.82rem; }
+  .case-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+  .case-table th {
+    text-align: left; color: var(--muted); font-weight: 600;
+    padding: 4px 8px; border-bottom: 1px solid var(--border);
+  }
+  .case-table td { padding: 5px 8px; border-bottom: 1px solid var(--border); }
+  .case-table tr.active td { background: var(--clinical-soft); }
+  .case-open {
+    font: inherit; color: var(--clinical); background: none; border: 0; padding: 0;
+    cursor: pointer; text-align: left; text-decoration: underline; word-break: break-all;
+  }
+  .verdict { font-weight: 700; }
+  .verdict.benign { color: var(--benign); }
+  .verdict.malignant { color: var(--malignant); }
+  .verdict.uncertain, .verdict.rejected { color: var(--warn); }
+  .case-note { margin: 8px 0 0; font-size: 0.72rem; color: var(--muted); }
 
   /* ---------- Grad-CAM, below the fold by design ---------- */
   #gradcam-card { display: none; margin-top: 14px; }
@@ -345,6 +373,26 @@
     .workspace { grid-template-columns: 1fr; }
     .dropzone { min-height: 140px; }
     .gradcam-grid { grid-template-columns: 1fr; }
+  }
+  /* "Save report as PDF": the browser's print-to-PDF, showing only the report,
+     the Grad-CAM maps and the disclaimer, in light colours whatever the theme. */
+  @media print {
+    :root, :root:not([data-theme="light"]), :root[data-theme="dark"] {
+      --bg: #ffffff; --panel: #ffffff; --panel-alt: #f7fafc;
+      --border: #d6dee7; --border-strong: #b8c6d4;
+      --text: #12212f; --muted: #5c7084;
+      --clinical: #0b6a8f; --clinical-dark: #075472; --clinical-soft: #e3f0f7;
+      --benign: #0f7a5a; --benign-soft: #e2f4ee;
+      --malignant: #b3372c; --malignant-soft: #fdecea;
+      --warn: #8a5a00; --warn-soft: #fdf3e0; --warn-border: #edd7a6;
+    }
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    body { background: #fff; }
+    #predict-form, footer, .report-actions, .scroll-hint { display: none !important; }
+    .workspace { display: block; }
+    .card { break-inside: avoid; margin-bottom: 12px; }
+    .gradcam-grid { grid-template-columns: 1fr 1fr; }
+    .print-only { display: block; }
   }
   @media (max-width: 480px) {
     .pipeline { grid-template-columns: 1fr; }
@@ -397,9 +445,9 @@
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v13"/>
           </svg>
           <span class="dz-main" id="dropzone-text">Select or drop an image</span>
-          <span class="dz-sub">H&amp;E-stained breast histology · PNG or JPEG</span>
+          <span class="dz-sub">H&amp;E-stained breast histology · PNG or JPEG · select several for a case</span>
         </button>
-        <input type="file" id="file-input" accept="image/*" />
+        <input type="file" id="file-input" accept="image/*" multiple />
 
         <div class="mag">
           <label class="field" for="magnification">Magnification</label>
@@ -490,11 +538,30 @@
             <span><span class="k">Specimen</span> <span class="v" id="kv-file"></span></span>
           </div>
 
-          <a class="scroll-hint" id="scroll-hint" href="#gradcam-card">↓ View Grad-CAM attention map</a>
+          <div class="report-actions">
+            <a class="scroll-hint" id="scroll-hint" href="#gradcam-card">↓ View Grad-CAM attention map</a>
+            <button type="button" class="report-btn" id="save-report">Save report as PDF</button>
+          </div>
+          <p class="print-only kv" id="print-meta"></p>
         </div>
       </div>
     </section>
   </div>
+
+  <!-- Several images from one case: per-image results -->
+  <section class="card" id="case-card" hidden>
+    <div class="card-head">Case summary <span id="case-count"></span></div>
+    <div class="card-body">
+      <p class="case-totals" id="case-totals"></p>
+      <table class="case-table">
+        <thead><tr><th>#</th><th>Image</th><th>Magnification</th><th>Result</th><th>Malignant</th></tr></thead>
+        <tbody id="case-rows"></tbody>
+      </table>
+      <p class="case-note">Per-image results; select an image to see its full report and Grad-CAM map.
+        There is deliberately no combined verdict for the case: with only 11 test patients there is no
+        way to check that one would be reliable.</p>
+    </div>
+  </section>
 
   <!-- Below the fold: the Grad-CAM heat map -->
   <section class="card" id="gradcam-card">
@@ -556,6 +623,11 @@
 
   let selectedFile = null;
   let previewUrl = null;
+  // Several files from one case: each is analysed and listed in the case card.
+  let selectedFiles = [];
+  let caseResults = [];
+  let caseUrls = [];
+  const caseCard = document.getElementById("case-card");
   // Bumped whenever a new file is chosen, so a response to an earlier upload
   // that arrives late is dropped instead of shown under the new file's name.
   let currentRequest = 0;
@@ -602,8 +674,20 @@
     setStatus("");
   }
 
+  function selectFiles(fileList) {
+    const files = Array.from(fileList || []);
+    if (!files.length) return;
+    caseUrls.forEach((url) => URL.revokeObjectURL(url));
+    caseUrls = [];
+    caseResults = [];
+    caseCard.hidden = true;
+    selectedFiles = files;
+    selectFile(files[0]);
+    if (files.length > 1) dropzoneText.textContent = files.length + " images selected — click to change";
+  }
+
   dropzone.addEventListener("click", () => fileInput.click());
-  fileInput.addEventListener("change", () => selectFile(fileInput.files[0]));
+  fileInput.addEventListener("change", () => selectFiles(fileInput.files));
 
   ["dragover", "dragenter"].forEach((evt) =>
     dropzone.addEventListener(evt, (e) => {
@@ -617,10 +701,7 @@
       dropzone.classList.remove("dragover");
     })
   );
-  dropzone.addEventListener("drop", (e) => {
-    const file = e.dataTransfer.files && e.dataTransfer.files[0];
-    if (file) selectFile(file);
-  });
+  dropzone.addEventListener("drop", (e) => selectFiles(e.dataTransfer.files));
 
   function renderFinding(data) {
     if (data.uncertain) {
@@ -712,35 +793,124 @@
     placeholder.textContent = "No result: " + detail;
   }
 
+  document.getElementById("save-report").addEventListener("click", () => {
+    document.getElementById("print-meta").textContent =
+      "Report generated " + new Date().toLocaleString() +
+      " · Research and educational use only; not a medical diagnosis.";
+    const previousTitle = document.title;
+    // The browser offers the page title as the PDF's file name.
+    const specimen = selectedFile ? selectedFile.name.replace(/\.[^.]+$/, "") : "specimen";
+    document.title = "Histology report - " + specimen;
+    window.print();
+    document.title = previousTitle;
+  });
+
+  async function requestAnalysis(file) {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("magnification", document.getElementById("magnification").value);
+    const resp = await fetch("/predict", { method: "POST", body: formData });
+    if (!resp.ok) return { ok: false, status: resp.status, detail: await errorDetail(resp) };
+    return { ok: true, data: await resp.json() };
+  }
+
+  function showResult(result) {
+    if (result.ok) {
+      renderReport(result.data);
+      setStatus("");
+    } else {
+      showNoResult(result.status, result.detail);
+      setStatus(result.detail, true);
+    }
+  }
+
+  function caseVerdict(result) {
+    if (!result.ok) return result.status === 422 ? ["Rejected", "rejected"] : ["Not analysed", "rejected"];
+    if (result.data.uncertain) return ["Uncertain", "uncertain"];
+    return result.data.label === "malignant" ? ["Malignant", "malignant"] : ["Benign", "benign"];
+  }
+
+  function caseRow(result, i) {
+    const tr = document.createElement("tr");
+    const [verdict, kind] = caseVerdict(result);
+    const open = document.createElement("button");
+    open.type = "button";
+    open.className = "case-open";
+    open.textContent = selectedFiles[i].name;
+    open.addEventListener("click", () => showCaseResult(i));
+    const cells = [
+      String(i + 1),
+      open,
+      result.ok ? result.data.magnification + "×" : "—",
+      verdict,
+      result.ok ? (result.data.probability * 100).toFixed(1) + "%" : "—",
+    ];
+    cells.forEach((value, column) => {
+      const td = document.createElement("td");
+      td.append(value);
+      if (column === 3) td.className = "verdict " + kind;
+      tr.append(td);
+    });
+    return tr;
+  }
+
+  function renderCaseTable() {
+    document.getElementById("case-rows").replaceChildren(...caseResults.map(caseRow));
+    const counts = {};
+    caseResults.forEach((result) => {
+      const verdict = caseVerdict(result)[0].toLowerCase();
+      counts[verdict] = (counts[verdict] || 0) + 1;
+    });
+    document.getElementById("case-totals").textContent =
+      Object.entries(counts).map(([verdict, n]) => n + " " + verdict).join(" · ");
+    document.getElementById("case-count").textContent =
+      "— " + caseResults.length + " of " + selectedFiles.length + " images";
+    caseCard.hidden = false;
+  }
+
+  function showCaseResult(i) {
+    selectedFile = selectedFiles[i];
+    preview.src = caseUrls[i];
+    gradcamOriginal.src = caseUrls[i];
+    showResult(caseResults[i]);
+    document.querySelectorAll("#case-rows tr").forEach((tr, j) => tr.classList.toggle("active", j === i));
+  }
+
+  async function analyseCase(request) {
+    caseResults = [];
+    caseUrls.forEach((url) => URL.revokeObjectURL(url));
+    caseUrls = selectedFiles.map((file) => URL.createObjectURL(file));
+    for (let i = 0; i < selectedFiles.length; i++) {
+      setBusy("Analysing image " + (i + 1) + " of " + selectedFiles.length + "…");
+      const result = await requestAnalysis(selectedFiles[i]);
+      if (request !== currentRequest) return;
+      caseResults.push(result);
+      renderCaseTable();
+    }
+    setStatus("");
+    showCaseResult(0);
+  }
+
+  async function analyseSingle(request) {
+    setBusy("Analysing specimen…");
+    const result = await requestAnalysis(selectedFile);
+    if (request !== currentRequest) return;
+    showResult(result);
+  }
+
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     if (!selectedFile) return;
 
     const request = ++currentRequest;
     submitBtn.disabled = true;
-    setBusy("Analysing specimen…");
     showResults(false);
     setStage(1, "busy", "Checking…");
     setStage(2, "idle", "Queued");
     setStage(3, "idle", "Queued");
-
-    const formData = new FormData();
-    formData.append("file", selectedFile);
-    formData.append("magnification", document.getElementById("magnification").value);
-
     try {
-      const resp = await fetch("/predict", { method: "POST", body: formData });
-      if (request !== currentRequest) return;
-      if (!resp.ok) {
-        const detail = await errorDetail(resp);
-        if (request !== currentRequest) return;
-        showNoResult(resp.status, detail);
-        throw new Error(detail);
-      }
-      const data = await resp.json();
-      if (request !== currentRequest) return;
-      renderReport(data);
-      setStatus("");
+      if (selectedFiles.length > 1) await analyseCase(request);
+      else await analyseSingle(request);
     } catch (err) {
       if (request !== currentRequest) return;
       setStatus(err.message || "Something went wrong.", true);

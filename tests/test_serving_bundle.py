@@ -43,3 +43,21 @@ def test_stage_1_feature_screen_ships_with_the_models():
 def test_magnification_detector_ships_with_the_models():
     # Without it /predict can't auto-detect and asks the user to choose.
     assert (SERVING_DIR / "magnification.pt").is_file()
+
+
+def test_calibration_matches_the_shipped_models():
+    # Temperatures are only valid for the exact checkpoints they were fitted
+    # on; retraining a model without re-running scripts/calibrate_serving.py
+    # would silently leave it uncalibrated. In CI the checkpoints are Git LFS
+    # pointers, whose oid is the file's SHA-256.
+    import hashlib
+    import json
+
+    calibration = json.loads((SERVING_DIR / "calibration.json").read_text(encoding="utf-8"))
+    for name, entry in calibration["models"].items():
+        content = (SERVING_DIR / name).read_bytes()
+        if content.startswith(b"version https://git-lfs"):
+            actual = content.split(b"oid sha256:")[1].split()[0].decode()
+        else:
+            actual = hashlib.sha256(content).hexdigest()
+        assert actual == entry["sha256"], f"{name} changed since calibration was fitted"
