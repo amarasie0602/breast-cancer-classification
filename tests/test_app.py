@@ -754,3 +754,67 @@ def test_test_time_augmentation_runs_only_when_calibration_says_so(monkeypatch, 
 
     assert len(calls) == (1 if tta else 0)
     assert body["probability"] == pytest.approx(torch.sigmoid(torch.tensor(2.0)).item(), abs=1e-4)
+
+
+def test_preload_loads_every_magnification_model_present(monkeypatch, tmp_path):
+    import src.serving.app as app_module
+
+    mag_dir = tmp_path / "mags"
+    mag_dir.mkdir()
+    _make_forced_binary_checkpoint(mag_dir, force_malignant=True).rename(mag_dir / "best_mag200.pt")
+    monkeypatch.setattr("src.serving.app.CHECKPOINT_DIR", mag_dir)
+    monkeypatch.setattr("src.serving.app.CHECKPOINT_PATH", str(tmp_path / "absent.pt"))
+    get_model.cache_clear()
+
+    app_module._preload_models()
+
+    assert get_model.cache_info().currsize == 1  # just the 200x model; nothing else exists
+
+
+@pytest.mark.parametrize("setting, expected_calls", [(None, 1), ("0", 0)])
+def test_startup_preloads_unless_disabled(monkeypatch, setting, expected_calls):
+    calls = []
+    monkeypatch.setattr("src.serving.app._preload_models", lambda: calls.append(1))
+    if setting is None:
+        monkeypatch.delenv("PRELOAD_MODELS", raising=False)
+    else:
+        monkeypatch.setenv("PRELOAD_MODELS", setting)
+
+    with TestClient(app):  # entering the client runs the app's startup
+        pass
+
+    assert len(calls) == expected_calls
+
+
+def test_analysis_runs_in_a_worker_thread_not_on_the_event_loop(monkeypatch, tmp_path):
+    import src.serving.app as app_module
+
+    handed_off = []
+    real = app_module.run_in_threadpool
+
+    async def spy(func, *args):
+        handed_off.append(func.__name__)
+        return await real(func, *args)
+
+    monkeypatch.setattr("src.serving.app.run_in_threadpool", spy)
+    checkpoint = _make_forced_binary_checkpoint(tmp_path, force_malignant=False)
+    monkeypatch.setattr("src.serving.app.CHECKPOINT_PATH", str(checkpoint))
+    get_model.cache_clear()
+
+    assert _post_image(_fake_histology_bytes()).status_code == 200
+    assert handed_off == ["_analyse"]
+
+
+def test_analyses_queue_behind_one_another(monkeypatch):
+    import threading
+
+    import src.serving.app as app_module
+
+    monkeypatch.setattr("src.serving.app._analyse_unlocked", lambda image_bytes, magnification: "done")
+    finished = threading.Event()
+    with app_module._INFERENCE_LOCK:  # an analysis already in progress
+        worker = threading.Thread(target=lambda: app_module._analyse(b"", "40") and finished.set())
+        worker.start()
+        assert not finished.wait(0.3)
+    worker.join(5)
+    assert finished.is_set()
