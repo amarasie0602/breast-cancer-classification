@@ -10,6 +10,8 @@
     --panel: #ffffff;
     --panel-alt: #f7fafc;
     --border: #d6dee7;
+    --control-border: #83919f;
+    --on-clinical: #ffffff;
     --border-strong: #b8c6d4;
     --text: #12212f;
     --muted: #5c7084;
@@ -29,6 +31,7 @@
     :root:not([data-theme="light"]) {
       --bg: #0e151c; --panel: #151f29; --panel-alt: #1a2631;
       --border: #27353f; --border-strong: #35485a;
+      --control-border: #637382; --on-clinical: #0e151c;
       --text: #e6edf3; --muted: #9ab0c2;
       --clinical: #4cadd8; --clinical-dark: #7cc6e6; --clinical-soft: #102c3b;
       --benign: #47c79c; --benign-soft: #10302a;
@@ -39,6 +42,7 @@
   :root[data-theme="dark"] {
     --bg: #0e151c; --panel: #151f29; --panel-alt: #1a2631;
     --border: #27353f; --border-strong: #35485a;
+    --control-border: #637382; --on-clinical: #0e151c;
     --text: #e6edf3; --muted: #9ab0c2;
     --clinical: #4cadd8; --clinical-dark: #7cc6e6; --clinical-soft: #102c3b;
     --benign: #47c79c; --benign-soft: #10302a;
@@ -100,7 +104,7 @@
   }
   .notice strong { color: var(--warn); }
   .notice details { display: inline; }
-  .notice summary { display: inline; cursor: pointer; color: var(--clinical); margin-left: 4px; }
+  .notice summary { display: inline-block; padding: 4px 2px; cursor: pointer; color: var(--clinical); margin-left: 4px; }
   .notice details p { margin: 6px 0 2px; color: var(--muted); }
 
   /* ---------- Two-column workspace: input | results ---------- */
@@ -118,6 +122,7 @@
     overflow: hidden;
   }
   .card-head {
+    margin: 0;
     background: var(--panel-alt);
     border-bottom: 1px solid var(--border);
     padding: 7px 14px;
@@ -139,7 +144,7 @@
 
   .dropzone {
     width: 100%; font: inherit; color: inherit;
-    border: 2px dashed var(--border-strong);
+    border: 2px dashed var(--control-border);
     border-radius: 8px;
     background: var(--panel-alt);
     text-align: center;
@@ -150,7 +155,7 @@
     transition: border-color .15s, background .15s;
   }
   .dropzone:hover, .dropzone.dragover { border-color: var(--clinical); background: var(--clinical-soft); }
-  .dropzone:focus-visible { outline: 3px solid var(--clinical); outline-offset: 2px; }
+  :focus-visible { outline: 3px solid var(--clinical); outline-offset: 2px; }
   .dropzone svg { color: var(--clinical); margin-bottom: 4px; }
   .dropzone .dz-main { font-weight: 600; font-size: 0.86rem; word-break: break-all; }
   .dropzone .dz-sub { color: var(--muted); font-size: 0.72rem; margin-top: 2px; }
@@ -171,7 +176,7 @@
     padding: 7px 9px;
     font: inherit; font-size: 0.85rem;
     border-radius: 6px;
-    border: 1px solid var(--border-strong);
+    border: 1px solid var(--control-border);
     background: var(--panel); color: var(--text);
   }
   .mag { margin-top: 10px; }
@@ -184,7 +189,7 @@
     padding: 11px;
     font: inherit; font-size: 0.9rem; font-weight: 700;
     border: none; border-radius: 7px;
-    background: var(--clinical); color: #fff;
+    background: var(--clinical); color: var(--on-clinical);
     cursor: pointer;
   }
   button.analyze:hover:not(:disabled) { background: var(--clinical-dark); }
@@ -316,7 +321,8 @@
 
   .scroll-hint {
     display: none;
-    margin-top: 10px;
+    padding: 4px 0;
+    margin-top: 6px;
     font-size: 0.74rem;
     color: var(--clinical);
     text-decoration: none;
@@ -331,6 +337,10 @@
   }
   .report-btn:hover { background: var(--panel-alt); }
   .print-only { display: none; }
+  .sr-only {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+  }
 
   #case-card { margin-top: 14px; }
   .case-totals { margin: 0 0 8px; font-weight: 600; font-size: 0.82rem; }
@@ -344,6 +354,7 @@
   .case-open {
     font: inherit; color: var(--clinical); background: none; border: 0; padding: 0;
     cursor: pointer; text-align: left; text-decoration: underline; word-break: break-all;
+    min-height: 24px;
   }
   .verdict { font-weight: 700; }
   .verdict.benign { color: var(--benign); }
@@ -367,7 +378,7 @@
     max-width: 1180px; margin: 0 auto; padding: 0 16px 24px;
     color: var(--muted); font-size: 0.72rem; text-align: center;
   }
-  footer a { color: var(--clinical); text-decoration: none; }
+  footer a { color: var(--clinical); text-decoration: none; display: inline-block; padding: 4px 2px; }
 
   @media (max-width: 760px) {
     .workspace { grid-template-columns: 1fr; }
@@ -380,6 +391,7 @@
     :root, :root:not([data-theme="light"]), :root[data-theme="dark"] {
       --bg: #ffffff; --panel: #ffffff; --panel-alt: #f7fafc;
       --border: #d6dee7; --border-strong: #b8c6d4;
+      --control-border: #83919f; --on-clinical: #ffffff;
       --text: #12212f; --muted: #5c7084;
       --clinical: #0b6a8f; --clinical-dark: #075472; --clinical-soft: #e3f0f7;
       --benign: #0f7a5a; --benign-soft: #e2f4ee;
@@ -435,7 +447,7 @@
   <div class="workspace">
     <!-- Left: input -->
     <form id="predict-form" class="card">
-      <div class="card-head">Specimen input</div>
+      <h2 class="card-head">Specimen input</h2>
       <div class="card-body">
         <label class="field" for="file-input">Histopathology image</label>
         <button type="button" class="dropzone" id="dropzone"
@@ -467,8 +479,9 @@
     </form>
 
     <!-- Right: results, visible without scrolling -->
-    <section class="card" aria-live="polite">
-      <div class="card-head">Analysis report</div>
+    <section class="card">
+      <h2 class="card-head">Analysis report</h2>
+      <p class="sr-only" id="result-announcer" aria-live="polite"></p>
       <div class="card-body">
         <div class="pipeline">
           <div class="stage" id="stage-1" data-state="idle">
@@ -550,7 +563,7 @@
 
   <!-- Several images from one case: per-image results -->
   <section class="card" id="case-card" hidden>
-    <div class="card-head">Case summary <span id="case-count"></span></div>
+    <h2 class="card-head">Case summary <span id="case-count"></span></h2>
     <div class="card-body">
       <p class="case-totals" id="case-totals"></p>
       <table class="case-table">
@@ -565,7 +578,7 @@
 
   <!-- Below the fold: the Grad-CAM heat map -->
   <section class="card" id="gradcam-card">
-    <div class="card-head">Grad-CAM attention map <span class="aside">Where the model looked</span></div>
+    <h2 class="card-head">Grad-CAM attention map <span class="aside">Where the model looked</span></h2>
     <div class="card-body">
       <div class="gradcam-grid">
         <figure>
@@ -684,6 +697,11 @@
     selectedFiles = files;
     selectFile(files[0]);
     if (files.length > 1) dropzoneText.textContent = files.length + " images selected — click to change";
+    dropzone.setAttribute(
+      "aria-label",
+      (files.length > 1 ? files.length + " images selected" : "Selected " + files[0].name) +
+        ". Choose different histopathology images"
+    );
   }
 
   dropzone.addEventListener("click", () => fileInput.click());
@@ -774,6 +792,8 @@
 
     showResults(true);
     scrollHint.style.display = "inline-block";
+    document.getElementById("result-announcer").textContent =
+      "Result: " + resultLabel.textContent + ", " + resultConfidence.textContent + ".";
   }
 
   async function errorDetail(resp) {
@@ -904,6 +924,7 @@
 
     const request = ++currentRequest;
     submitBtn.disabled = true;
+    document.getElementById("result-announcer").textContent = "";
     showResults(false);
     setStage(1, "busy", "Checking…");
     setStage(2, "idle", "Queued");

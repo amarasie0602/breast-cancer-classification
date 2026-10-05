@@ -101,6 +101,31 @@ has as few as 135 images at a single magnification).
 
 ## Limitations
 
+- **On images from another lab it rarely clears non-cancer tissue.**
+  Everything else on this page is measured on BreakHis. To see how the
+  served pipeline holds up elsewhere, it was run on 107 images of BACH
+  (ICIAR 2018, CC BY-NC-ND 4.0; a different lab and scanner;
+  `scripts/evaluate_external_bach.py`):
+
+  | BACH class | n | Correct | Of the wrong ones, flagged "Uncertain" |
+  | --- | --- | --- | --- |
+  | Normal (healthy) | 26 | **2 (8%)** called benign | 3 of 24 |
+  | Benign | 27 | **11 (41%)** called benign | 3 of 16 |
+  | In situ carcinoma | 27 | 26 (96%) called malignant | 1 of 1 |
+  | Invasive carcinoma | 27 | 27 (100%) called malignant | - |
+
+  Sensitivity 98%, specificity 25%. Stage 1 rejected none of them, and
+  magnification detection read most as 100x or 40x (BACH images cover a
+  wider field than BreakHis 200x; 48 got the "unsure" warning). Cancer is
+  still caught, but the model calls most healthy and benign tissue from
+  another lab malignant, and mostly with confidence: calibration was fitted
+  on BreakHis and doesn't carry over. Healthy tissue fares worst because
+  BreakHis contains none. A "differs from the training images" caution was
+  considered and not added: on the stage-1 feature distance, the cut-off
+  that flags 5% of BreakHis test images flags only 49% of BACH, so it would
+  miss half of exactly the images it is meant to warn about. Training data
+  with healthy and benign tissue from other labs is what would address
+  this.
 - **Small, single-source dataset.** 82 patients from one lab is not
   representative of the broader population; staining protocols, scanners,
   and patient demographics vary across institutions and are not captured

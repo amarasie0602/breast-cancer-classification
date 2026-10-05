@@ -227,5 +227,12 @@ run the PyTorch server. The `deploy` job in CD still triggers a
 See [docs/model_card.md](docs/model_card.md) for the full breakdown. In
 short: this is a coursework/portfolio project, not a clinical tool — trained
 on a small single-institution dataset (82 patients), with known class and
-subtype imbalance, and no external validation. Grad-CAM overlays are
-illustrative, not proof the model attends to clinically meaningful features.
+subtype imbalance. Grad-CAM overlays are illustrative, not proof the model
+attends to clinically meaningful features.
+
+**Tested on another lab's images (BACH), it catches cancer but can't clear
+tissue:** 53 of 54 carcinomas were called malignant, but only 2 of 26 normal
+and 11 of 27 benign images were called benign, most of the misses with
+confidence. BreakHis contains no healthy tissue, and the model has never seen
+another lab's slides. Details in the
+[model card](docs/model_card.md#limitations).
