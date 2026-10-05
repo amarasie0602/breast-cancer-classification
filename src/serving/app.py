@@ -104,10 +104,12 @@ MAX_IMAGE_PIXELS = 40_000_000
 # whole curve to inform it.
 DECISION_THRESHOLD = float(os.environ.get("DECISION_THRESHOLD", "0.5"))
 
-# Probabilities in this band are reported as uncertain. Measured on the 1,388
-# validation images: inside 0.2-0.8 (15% of images) the served models are
-# right 68% of the time, outside it 94%. A 52%-malignant result shown in the
-# same red box as a 99% one reads as a diagnosis; it's closer to a coin toss.
+# Probabilities in this band are reported as uncertain. On the calibrated
+# probabilities (calibration.json), the served models are right 69% of the time
+# inside 0.2-0.8 and 95% outside it on the validation images; on the held-out
+# test images 61% vs 89%, with 67 of the 163 wrong predictions inside the band.
+# A 52%-malignant result shown in the same red box as a 99% one reads as a
+# diagnosis; it's closer to a coin toss.
 UNCERTAIN_BAND = (
     float(os.environ.get("UNCERTAIN_LOW", "0.2")),
     float(os.environ.get("UNCERTAIN_HIGH", "0.8")),
