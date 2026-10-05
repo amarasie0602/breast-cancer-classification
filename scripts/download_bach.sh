@@ -12,7 +12,9 @@ for shard in \
   train-00005-of-00015-dbcf221bf12fae2a.parquet \
   train-00009-of-00015-991e02adb7338e11.parquet \
   train-00013-of-00015-9d1c485eacb1d332.parquet; do
-  until curl -sSL --fail -C - --retry 50 --retry-delay 30 --retry-all-errors \
+  # HTTPS only, including on the CDN redirect the mirror answers with.
+  until curl -sSL --fail --proto =https --proto-redir =https -C - \
+      --retry 50 --retry-delay 30 --retry-all-errors \
       -o "BACH/$shard.part" "$BASE/$shard"; do
     echo "$(date '+%F %T') retrying $shard"; sleep 60
   done
