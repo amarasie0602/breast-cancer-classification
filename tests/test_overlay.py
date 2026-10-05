@@ -21,3 +21,17 @@ def test_overlay_with_zero_alpha_returns_original():
     overlay = cam_to_overlay(cam, original, alpha=0.0)
 
     assert np.array_equal(np.asarray(overlay), np.asarray(original))
+
+
+def test_jet_matches_matplotlib_exactly():
+    # overlay.py carries its own copy of the colormap so serving doesn't need
+    # matplotlib; it must render the same heat map, byte for byte.
+    import numpy as np
+    from matplotlib import colormaps
+
+    from src.explainability.overlay import jet
+
+    values = np.linspace(0.0, 1.0, 4097)
+    ours = (jet(values) * 255).astype(np.uint8)
+    theirs = (colormaps["jet"](values)[:, :3] * 255).astype(np.uint8)
+    assert np.array_equal(ours, theirs)
