@@ -2,12 +2,17 @@
 
 import base64
 import io
+import logging
 import os
+import threading
+import time
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated, Dict
 
 import torch
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 from PIL import Image
 
@@ -31,7 +36,19 @@ from src.serving.model_loader import (
 )
 from src.serving.schemas import PredictionResponse
 
-app = FastAPI(title="Breast Cancer Histopathology Classifier")
+logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    # Load every model before the first request instead of during it; set
+    # PRELOAD_MODELS=0 to skip (e.g. on a machine with little memory).
+    if os.environ.get("PRELOAD_MODELS", "1") != "0":
+        await run_in_threadpool(_preload_models)
+    yield
+
+
+app = FastAPI(title="Breast Cancer Histopathology Classifier", lifespan=lifespan)
 app.add_middleware(RequestLoggingMiddleware)
 
 # The app serves the weights-only copies in serving_checkpoints/, both locally
@@ -200,6 +217,34 @@ def _binary_checkpoint_for(magnification: str):
     return CHECKPOINT_PATH, None
 
 
+def _preload_models() -> None:
+    """Load and run every served model once, so the first request isn't the
+    one that pays for reading ~400 MB of weights from disk."""
+    started = time.perf_counter()
+    dummy = torch.zeros(1, 3, 224, 224)
+    calibration = load_calibration(CALIBRATION_PATH)
+    loaded = []
+    for magnification in ALLOWED_MAGNIFICATIONS:
+        checkpoint_path, _ = _binary_checkpoint_for(magnification)
+        if not os.path.exists(checkpoint_path):
+            continue
+        with torch.no_grad():
+            get_model(checkpoint_path)(dummy)
+        if calibration:
+            calibration.temperature_for(checkpoint_path)  # hashes the checkpoint once
+        loaded.append(f"{magnification}x")
+    blank = Image.new("RGB", (224, 224))
+    screen = load_histology_screen(HISTOLOGY_SCREEN_PATH)
+    if screen:
+        screen.features([blank])
+        loaded.append("histology screen")
+    detector = load_magnification_detector(MAGNIFICATION_DETECTOR_PATH)
+    if detector:
+        detector.detect(blank)
+        loaded.append("magnification detector")
+    logger.info("preloaded %s in %.1fs", ", ".join(loaded) or "nothing", time.perf_counter() - started)
+
+
 def _classify_subtype(tensor):
     """Stage 3. Returns (subtype, display_name, confidence) when a good
     enough model is available, a string explaining why not when there is a
@@ -265,6 +310,21 @@ async def predict(
             status_code=413,
             detail=f"File is larger than {MAX_UPLOAD_BYTES // (1024 * 1024)} MB",
         )
+    return await run_in_threadpool(_analyse, image_bytes, magnification)
+
+
+# One analysis at a time: Grad-CAM attaches hooks to the shared, cached model,
+# so two at once could mix up each other's heat maps. The work runs in a worker
+# thread, so the server keeps answering /health and page loads meanwhile.
+_INFERENCE_LOCK = threading.Lock()
+
+
+def _analyse(image_bytes: bytes, magnification: str) -> PredictionResponse:
+    with _INFERENCE_LOCK:
+        return _analyse_unlocked(image_bytes, magnification)
+
+
+def _analyse_unlocked(image_bytes: bytes, magnification: str) -> PredictionResponse:
     image = _decode_image(image_bytes)
 
     if not _is_histology(image):
