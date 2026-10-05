@@ -16,6 +16,7 @@ from src.data.stain import MACENKO, StainNormalize
 from src.data.transforms import eval_transform
 from src.explainability.gradcam import GradCAM
 from src.explainability.overlay import cam_to_overlay
+from src.serving.calibration import dihedral_views, load_calibration
 from src.serving.input_guard import looks_like_histology
 from src.serving.logging_middleware import RequestLoggingMiddleware
 from src.serving.magnification import load_magnification_detector
@@ -62,6 +63,9 @@ MIN_DETECTION_CONFIDENCE = float(os.environ.get("MIN_DETECTION_CONFIDENCE", "0.9
 HISTOLOGY_SCREEN_PATH = os.environ.get(
     "HISTOLOGY_SCREEN_PATH", "serving_checkpoints/histology_screen.pt"
 )
+# Test-time augmentation and per-model temperatures (src/serving/calibration.py);
+# without the file the plain model output is used.
+CALIBRATION_PATH = os.environ.get("CALIBRATION_PATH", "serving_checkpoints/calibration.json")
 SUBTYPE_CHECKPOINT_PATH = os.environ.get(
     "SUBTYPE_CHECKPOINT_PATH", "serving_checkpoints/best_subtype.pt"
 )
@@ -294,9 +298,14 @@ async def predict(
         else raw_tensor
     )
 
+    calibration = load_calibration(CALIBRATION_PATH)
     with torch.no_grad():
-        logit = model(tensor)
-        probability = torch.sigmoid(logit).item()
+        if calibration and calibration.tta:
+            logit = model(dihedral_views(tensor).flatten(0, 1)).mean()
+        else:
+            logit = model(tensor)[0, 0]
+    temperature = calibration.temperature_for(checkpoint_path) if calibration else 1.0
+    probability = torch.sigmoid(logit / temperature).item()
 
     label = "malignant" if probability >= DECISION_THRESHOLD else "benign"
     record_prediction(label)

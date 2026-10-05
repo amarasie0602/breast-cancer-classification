@@ -31,6 +31,7 @@ def _isolate_checkpoint_dir(monkeypatch, tmp_path):
     monkeypatch.setattr(
         "src.serving.app.MAGNIFICATION_DETECTOR_PATH", str(tmp_path / "no_detector.pt")
     )
+    monkeypatch.setattr("src.serving.app.CALIBRATION_PATH", str(tmp_path / "no_calibration.json"))
 
 
 def _make_forced_binary_checkpoint(tmp_path, force_malignant: bool):
@@ -681,3 +682,75 @@ def test_magnification_is_not_detected_for_a_rejected_image(monkeypatch, tmp_pat
 
     assert resp.status_code == 422
     assert detector.seen == 0
+
+
+def _make_fixed_logit_checkpoint(tmp_path, logit):
+    """A model whose output logit is always `logit`, whatever the image."""
+    model = BreakHisClassifier(pretrained=False)
+    with torch.no_grad():
+        model.backbone.fc.weight.zero_()
+        model.backbone.fc.bias.fill_(logit)
+    path = tmp_path / f"fixed_{logit}.pt"
+    save_checkpoint(path, model, optim.Adam(model.parameters()), epoch=0, metrics={})
+    return path
+
+
+def _write_calibration(path, checkpoint, temperature, tta=False, sha=None):
+    import hashlib
+    import json
+
+    sha = sha or hashlib.sha256(checkpoint.read_bytes()).hexdigest()
+    path.write_text(json.dumps(
+        {"tta": tta, "models": {checkpoint.name: {"temperature": temperature, "sha256": sha}}}
+    ))
+
+
+def _predict_with_calibration(monkeypatch, tmp_path, checkpoint, calibration_path):
+    from src.serving.calibration import load_calibration
+
+    load_calibration.cache_clear()
+    get_model.cache_clear()
+    monkeypatch.setattr("src.serving.app.CHECKPOINT_PATH", str(checkpoint))
+    monkeypatch.setattr("src.serving.app.SUBTYPE_CHECKPOINT_PATH", "nonexistent_subtype.pt")
+    monkeypatch.setattr("src.serving.app.CALIBRATION_PATH", str(calibration_path))
+    return _post_image(_fake_histology_bytes()).json()
+
+
+def test_temperature_softens_the_probability_without_changing_the_label(monkeypatch, tmp_path):
+    checkpoint = _make_fixed_logit_checkpoint(tmp_path, 2.0)  # sigmoid(2) = 0.881
+    calibration = tmp_path / "calibration.json"
+    _write_calibration(calibration, checkpoint, temperature=2.0)
+
+    body = _predict_with_calibration(monkeypatch, tmp_path, checkpoint, calibration)
+
+    assert body["probability"] == pytest.approx(torch.sigmoid(torch.tensor(1.0)).item(), abs=1e-4)
+    assert body["label"] == "malignant"
+
+
+def test_temperature_fitted_on_another_checkpoint_is_not_applied(monkeypatch, tmp_path):
+    checkpoint = _make_fixed_logit_checkpoint(tmp_path, 2.0)
+    calibration = tmp_path / "calibration.json"
+    _write_calibration(calibration, checkpoint, temperature=2.0, sha="0" * 64)
+
+    body = _predict_with_calibration(monkeypatch, tmp_path, checkpoint, calibration)
+
+    assert body["probability"] == pytest.approx(torch.sigmoid(torch.tensor(2.0)).item(), abs=1e-4)
+
+
+@pytest.mark.parametrize("tta", [True, False])
+def test_test_time_augmentation_runs_only_when_calibration_says_so(monkeypatch, tmp_path, tta):
+    import src.serving.app as app_module
+
+    checkpoint = _make_fixed_logit_checkpoint(tmp_path, 2.0)
+    calibration = tmp_path / "calibration.json"
+    _write_calibration(calibration, checkpoint, temperature=1.0, tta=tta)
+    calls = []
+    real_views = app_module.dihedral_views
+    monkeypatch.setattr(
+        "src.serving.app.dihedral_views", lambda x: calls.append(1) or real_views(x)
+    )
+
+    body = _predict_with_calibration(monkeypatch, tmp_path, checkpoint, calibration)
+
+    assert len(calls) == (1 if tta else 0)
+    assert body["probability"] == pytest.approx(torch.sigmoid(torch.tensor(2.0)).item(), abs=1e-4)
