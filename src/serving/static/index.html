@@ -322,6 +322,15 @@
     text-decoration: none;
   }
   .scroll-hint:hover { text-decoration: underline; }
+  .report-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  .report-btn {
+    margin-top: 10px; padding: 5px 12px;
+    font: inherit; font-size: 0.74rem; font-weight: 600;
+    color: var(--clinical); background: var(--clinical-soft);
+    border: 1px solid var(--clinical); border-radius: 6px; cursor: pointer;
+  }
+  .report-btn:hover { background: var(--panel-alt); }
+  .print-only { display: none; }
 
   /* ---------- Grad-CAM, below the fold by design ---------- */
   #gradcam-card { display: none; margin-top: 14px; }
@@ -345,6 +354,26 @@
     .workspace { grid-template-columns: 1fr; }
     .dropzone { min-height: 140px; }
     .gradcam-grid { grid-template-columns: 1fr; }
+  }
+  /* "Save report as PDF": the browser's print-to-PDF, showing only the report,
+     the Grad-CAM maps and the disclaimer, in light colours whatever the theme. */
+  @media print {
+    :root, :root:not([data-theme="light"]), :root[data-theme="dark"] {
+      --bg: #ffffff; --panel: #ffffff; --panel-alt: #f7fafc;
+      --border: #d6dee7; --border-strong: #b8c6d4;
+      --text: #12212f; --muted: #5c7084;
+      --clinical: #0b6a8f; --clinical-dark: #075472; --clinical-soft: #e3f0f7;
+      --benign: #0f7a5a; --benign-soft: #e2f4ee;
+      --malignant: #b3372c; --malignant-soft: #fdecea;
+      --warn: #8a5a00; --warn-soft: #fdf3e0; --warn-border: #edd7a6;
+    }
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    body { background: #fff; }
+    #predict-form, footer, .report-actions, .scroll-hint { display: none !important; }
+    .workspace { display: block; }
+    .card { break-inside: avoid; margin-bottom: 12px; }
+    .gradcam-grid { grid-template-columns: 1fr 1fr; }
+    .print-only { display: block; }
   }
   @media (max-width: 480px) {
     .pipeline { grid-template-columns: 1fr; }
@@ -490,7 +519,11 @@
             <span><span class="k">Specimen</span> <span class="v" id="kv-file"></span></span>
           </div>
 
-          <a class="scroll-hint" id="scroll-hint" href="#gradcam-card">↓ View Grad-CAM attention map</a>
+          <div class="report-actions">
+            <a class="scroll-hint" id="scroll-hint" href="#gradcam-card">↓ View Grad-CAM attention map</a>
+            <button type="button" class="report-btn" id="save-report">Save report as PDF</button>
+          </div>
+          <p class="print-only kv" id="print-meta"></p>
         </div>
       </div>
     </section>
@@ -711,6 +744,18 @@
     setStage(3, "idle", "Not run");
     placeholder.textContent = "No result: " + detail;
   }
+
+  document.getElementById("save-report").addEventListener("click", () => {
+    document.getElementById("print-meta").textContent =
+      "Report generated " + new Date().toLocaleString() +
+      " · Research and educational use only; not a medical diagnosis.";
+    const previousTitle = document.title;
+    // The browser offers the page title as the PDF's file name.
+    const specimen = selectedFile ? selectedFile.name.replace(/\.[^.]+$/, "") : "specimen";
+    document.title = "Histology report - " + specimen;
+    window.print();
+    document.title = previousTitle;
+  });
 
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
