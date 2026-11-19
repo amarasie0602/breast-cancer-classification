@@ -26,7 +26,7 @@ def test_a_tie_inside_a_patient_counts_as_malignant():
     sensitivity, specificity = patient_sensitivity_specificity(
         ["A", "A"], preds=[1, 0], labels=[0, 0]
     )
-    assert sensitivity != sensitivity  # no malignant patient
+    assert math.isnan(sensitivity)  # no malignant patient
     assert specificity == 0.0
 
 
@@ -72,7 +72,9 @@ def test_bootstrap_interval_contains_the_point_estimate():
     labels = [1, 1, 1, 0, 0, 0]
     result = bootstrap_patient_ci(ids, preds, labels, n_bootstrap=200, seed=1)
     low, high = result["patient_sensitivity_ci95"]
-    assert math.isfinite(low) and low <= result["patient_sensitivity"] <= high
+    assert math.isfinite(low)
+    assert math.isfinite(high)
+    assert low <= result["patient_sensitivity"] <= high
     spec_low, spec_high = result["patient_specificity_ci95"]
     assert spec_low <= result["patient_specificity"] <= spec_high
     assert result["n_patients"] == 4

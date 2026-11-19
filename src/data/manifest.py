@@ -20,19 +20,37 @@ def default_manifest_path() -> Path:
     return Path(__file__).resolve().parents[2] / "splits" / "patients.json"
 
 
+def within_project(path: str | Path, what: str) -> Path:
+    """Resolve a path, refusing anything outside the project directory (cwd).
+
+    Same rule as ``src.training.train.within_project``: a ``..`` segment or an
+    absolute path that leaves the working directory is a ``ValueError``.
+    """
+    resolved = Path(path).resolve()
+    if not resolved.is_relative_to(Path.cwd()):
+        raise ValueError(f"{what} must be within the project directory: {path}")
+    return resolved
+
+
 def patient_id_of(sample: dict) -> str:
     return sample["path"].parent.parent.name
 
 
 def load_manifest(path: Path | None = None) -> dict | None:
-    manifest_path = default_manifest_path() if path is None else Path(path)
+    if path is None:
+        manifest_path = default_manifest_path()
+    else:
+        manifest_path = within_project(path, "manifest path")
     if not manifest_path.is_file():
         return None
     return json.loads(manifest_path.read_text(encoding="utf-8"))
 
 
 def write_manifest(manifest: dict, path: Path | None = None) -> Path:
-    manifest_path = default_manifest_path() if path is None else Path(path)
+    if path is None:
+        manifest_path = default_manifest_path()
+    else:
+        manifest_path = within_project(path, "manifest path")
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return manifest_path

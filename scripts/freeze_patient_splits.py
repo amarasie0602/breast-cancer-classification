@@ -15,7 +15,13 @@ import json
 from pathlib import Path
 
 from src.data.dataset import SUBTYPE_SCHEMES, BreakHisDataset, BreakHisSubtypeDataset
-from src.data.manifest import MANIFEST_VERSION, default_manifest_path, patient_id_of, write_manifest
+from src.data.manifest import (
+    MANIFEST_VERSION,
+    default_manifest_path,
+    patient_id_of,
+    within_project,
+    write_manifest,
+)
 from src.data.splits import stratified_patient_split
 from src.training.train import load_config
 
@@ -70,13 +76,13 @@ def main() -> None:
     parser.add_argument("--check", action="store_true", help="fail if the file differs from a fresh split")
     args = parser.parse_args()
 
-    data_root = Path(args.data_root)
+    data_root = within_project(args.data_root, "data root")
+    output = within_project(args.output if args.output else default_manifest_path(), "manifest path")
     if not (data_root / "histology_slides" / "breast").is_dir():
         raise SystemExit(
             f"No BreakHis tree at {data_root}. Place the dataset there before freezing the split."
         )
     manifest = build_manifest(data_root, load_config(args.data_config))
-    output = Path(args.output) if args.output else default_manifest_path()
 
     if args.check:
         if not output.is_file():
