@@ -1,75 +1,161 @@
-"""Model validation gate for the malignant-subtype classifier: fails if a
-trained checkpoint's macro F1 drops below threshold.
+"""Model validation gate for the subtype classifier.
 
-Skipped when no checkpoint is present (e.g. CI without a trained model yet).
-Mirrors tests/test_model_validation.py's binary-classifier gate.
+The score is recomputed on validation patients. The macro F1 stored inside
+the checkpoint is not the pass/fail decision. Missing weights or missing
+data skip locally and fail when ``CI_REQUIRE_MODEL_GATE=1``.
 """
 
 import os
+from pathlib import Path
 
 import pytest
 import torch
+import yaml
+from PIL import Image
+from torch import optim
 
-from src.data.dataset import SUBTYPE_NAMES, BreakHisSubtypeDataset
+from src.data.dataset import SUBTYPE_NAMES, SUBTYPE_SCHEMES, BreakHisSubtypeDataset
+from src.data.manifest import patient_id_of, resolve_patient_split
+from src.data.splits import filter_samples_by_patients
 from src.data.transforms import eval_transform
 from src.models.classifier import MalignantSubtypeClassifier
 from src.serving.app import MIN_SUBTYPE_MACRO_F1
-from src.serving.model_loader import subtype_checkpoint_macro_f1
-from src.training.checkpoint import load_checkpoint
+from src.serving.model_loader import subtype_checkpoint_macro_f1, subtype_checkpoint_scheme
+from src.training.checkpoint import load_checkpoint, save_checkpoint
 from src.training.subtype_loop import evaluate
+from tests.gateutil import gate_missing
 
-# Lower than the binary gate's 0.75: this is a much harder 4-class problem
-# with real class imbalance (ductal_carcinoma outnumbers papillary_carcinoma
-# ~6:1), so a lower macro-F1 bar is a realistic sanity check, not a rubber
-# stamp -- see docs/model_card.md for the actual achieved numbers.
-MIN_MACRO_F1 = 0.5
 _MIN_REAL_CHECKPOINT_BYTES = 1_000_000
-
-CHECKPOINT_PATH = os.environ.get("VALIDATION_SUBTYPE_CHECKPOINT_PATH", "serving_checkpoints/best_subtype.pt")
-VAL_DATA_ROOT = os.environ.get("VALIDATION_DATA_ROOT", "data/BreaKHis_v1")
+_REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
-def _checkpoint_available() -> bool:
-    return (
-        os.path.exists(CHECKPOINT_PATH)
-        and os.path.getsize(CHECKPOINT_PATH) >= _MIN_REAL_CHECKPOINT_BYTES
-    )
+def _checkpoint_path() -> str:
+    return os.environ.get("VALIDATION_SUBTYPE_CHECKPOINT_PATH", "serving_checkpoints/best_subtype.pt")
 
 
-def _checkpoint_claims_to_be_deployable() -> bool:
-    """Whether serving would actually use this checkpoint.
-
-    No subtype model trained so far clears serving's MIN_SUBTYPE_MACRO_F1
-    (see docs/model_card.md: every configuration lands at or below the ~0.25
-    random baseline), and serving refuses to report a subtype from one that
-    doesn't. Asserting a quality floor against a checkpoint the application
-    has already decided not to serve would fail the suite over a state the
-    system is deliberately handling -- so this gate only enforces the floor
-    on a checkpoint that claims to be good enough to deploy. Serving's
-    refusal to use the sub-par ones is covered by tests/test_app.py.
-    """
-    return subtype_checkpoint_macro_f1(CHECKPOINT_PATH) >= MIN_SUBTYPE_MACRO_F1
+def _data_root() -> Path:
+    return Path(os.environ.get("VALIDATION_DATA_ROOT", "data/BreaKHis_v1"))
 
 
-@pytest.mark.skipif(
-    not _checkpoint_available(), reason="No trained subtype checkpoint available to validate"
-)
-@pytest.mark.skipif(
-    _checkpoint_available() and not _checkpoint_claims_to_be_deployable(),
-    reason="Subtype checkpoint is below serving's quality bar, so it is not deployed",
-)
+def _data_config() -> dict:
+    return yaml.safe_load((_REPO_ROOT / "configs" / "data.yaml").read_text(encoding="utf-8"))
+
+
+def _checkpoint_reason(path: str) -> str | None:
+    if not os.path.exists(path) or os.path.getsize(path) < _MIN_REAL_CHECKPOINT_BYTES:
+        return (
+            "No trained subtype checkpoint available to validate "
+            f"({path} is missing or is a Git LFS pointer). Check out with git lfs pull."
+        )
+    return None
+
+
+def _dataset_reason(root: Path) -> str | None:
+    slides = root / "histology_slides" / "breast"
+    if not slides.is_dir() or not any(slides.rglob("*.png")):
+        return (
+            "BreakHis data is not available to validate "
+            f"({root} has no histology PNGs). Run dvc pull after the Drive remote is configured."
+        )
+    return None
+
+
 def test_subtype_checkpoint_meets_minimum_macro_f1_threshold():
-    model = MalignantSubtypeClassifier(num_classes=len(SUBTYPE_NAMES), pretrained=False)
-    load_checkpoint(CHECKPOINT_PATH, model)
+    checkpoint = _checkpoint_path()
+    missing_checkpoint = _checkpoint_reason(checkpoint)
+    if missing_checkpoint:
+        gate_missing(missing_checkpoint)
+    root = _data_root()
+    missing_data = _dataset_reason(root)
+    if missing_data:
+        gate_missing(missing_data)
+
+    scheme = subtype_checkpoint_scheme(checkpoint)
+    class_names = SUBTYPE_SCHEMES[scheme]["names"]
+    config = _data_config()
+    ratios_cfg = config["split_ratios"]
+    ratios = (ratios_cfg["train"], ratios_cfg["val"], ratios_cfg["test"])
+
+    full = BreakHisSubtypeDataset(root, scheme=scheme)
+    _, val_patients, _ = resolve_patient_split(
+        full.samples,
+        ratios=ratios,
+        seed=int(config["seed"]),
+        manifest_key=("subtype", scheme),
+        min_per_split=1,
+    )
+    dataset = BreakHisSubtypeDataset(root, transform=eval_transform(), scheme=scheme)
+    dataset.samples = filter_samples_by_patients(dataset.samples, val_patients)
+    if not dataset.samples:
+        gate_missing(f"Subtype validation split for {scheme} has no images at {root}.")
+
+    model = MalignantSubtypeClassifier(num_classes=len(class_names), pretrained=False)
+    load_checkpoint(checkpoint, model)
     model.eval()
-
-    ds = BreakHisSubtypeDataset(VAL_DATA_ROOT, transform=eval_transform())
-    dataloader = torch.utils.data.DataLoader(ds, batch_size=32)
-
+    patient_ids = [patient_id_of(sample) for sample in dataset.samples]
     metrics = evaluate(
-        model, dataloader, torch.nn.CrossEntropyLoss(), "cpu", num_classes=len(SUBTYPE_NAMES)
+        model,
+        torch.utils.data.DataLoader(dataset, batch_size=32),
+        torch.nn.CrossEntropyLoss(),
+        "cpu",
+        num_classes=len(class_names),
+        patient_ids=patient_ids,
+    )
+    # Recomputed from the validation images. The number written into the
+    # checkpoint by training is reported and then ignored.
+    stored = subtype_checkpoint_macro_f1(checkpoint)
+    recomputed = metrics["macro_f1"]
+    patient_f1 = metrics["patient_macro_f1"]
+    assert recomputed >= MIN_SUBTYPE_MACRO_F1, (
+        f"recomputed validation macro F1 is {recomputed:.3f} "
+        f"(patient-level {patient_f1:.3f}), below {MIN_SUBTYPE_MACRO_F1:.2f}. "
+        f"The checkpoint file records {stored:.3f}, which is not the decision."
+    )
+    assert patient_f1 >= MIN_SUBTYPE_MACRO_F1, (
+        f"patient-level validation macro F1 is {patient_f1:.3f}, below {MIN_SUBTYPE_MACRO_F1:.2f}"
     )
 
-    assert metrics["macro_f1"] >= MIN_MACRO_F1, (
-        f"subtype macro F1 {metrics['macro_f1']:.3f} below threshold {MIN_MACRO_F1}"
+
+def test_subtype_gate_does_not_trust_the_stored_macro_f1(tmp_path, monkeypatch):
+    """A checkpoint that claims 0.99 still fails when validation patients recompute below the bar."""
+    root = tmp_path / "data"
+    for index, subtype in enumerate(SUBTYPE_NAMES):
+        for patient_index in range(6):
+            directory = (
+                root / "histology_slides" / "breast" / "malignant" / "SOB" / subtype
+                / f"P{index}-{patient_index}" / "40X"
+            )
+            directory.mkdir(parents=True)
+            Image.new("RGB", (8, 8)).save(directory / "a.png")
+
+    model = MalignantSubtypeClassifier(num_classes=4, pretrained=False)
+    with torch.no_grad():
+        head = model.backbone.classifier[-1]
+        head.weight.zero_()
+        head.bias.zero_()
+        head.bias[0] = 50.0
+    checkpoint = tmp_path / "best_subtype.pt"
+    save_checkpoint(
+        checkpoint,
+        model,
+        optim.Adam(model.parameters()),
+        epoch=0,
+        metrics={"macro_f1": 0.99, "label_scheme": "four_subtypes"},
     )
+    monkeypatch.setenv("VALIDATION_SUBTYPE_CHECKPOINT_PATH", str(checkpoint))
+    monkeypatch.setenv("VALIDATION_DATA_ROOT", str(root))
+
+    with pytest.raises(AssertionError, match="recomputed validation macro F1"):
+        test_subtype_checkpoint_meets_minimum_macro_f1_threshold()
+
+
+def test_ci_require_model_gate_fails_when_the_subtype_checkpoint_is_missing(monkeypatch, tmp_path):
+    monkeypatch.setenv("CI_REQUIRE_MODEL_GATE", "1")
+    monkeypatch.setenv("VALIDATION_SUBTYPE_CHECKPOINT_PATH", str(tmp_path / "missing.pt"))
+    try:
+        test_subtype_checkpoint_meets_minimum_macro_f1_threshold()
+    except BaseException as exc:
+        assert exc.__class__.__name__ == "Failed"
+        assert "No trained subtype checkpoint" in str(exc)
+    else:
+        raise AssertionError("a missing subtype checkpoint must fail the gate in CI")

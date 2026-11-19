@@ -11,18 +11,21 @@ the training run used, so the numbers are reproducible rather than ad hoc.
 """
 
 import argparse
+import math
 
 import torch
 from torch.utils.data import DataLoader
 
 from src.data.dataset import SUBTYPE_SCHEMES, BreakHisDataset, BreakHisSubtypeDataset
-from src.data.splits import filter_samples_by_patients, stratified_patient_split
+from src.data.manifest import patient_id_of, resolve_patient_split
+from src.data.splits import filter_samples_by_patients
 from src.data.stain import require_stain_normalization
 from src.data.transforms import eval_transform
 from src.models.classifier import BreakHisClassifier, MalignantSubtypeClassifier
 from src.serving.model_loader import subtype_checkpoint_scheme
 from src.training.checkpoint import checkpoint_stain_normalization, load_checkpoint
-from src.training.loop import evaluate as evaluate_binary
+from src.training.metrics import accuracy, confusion_matrix, precision_recall_f1, sensitivity_specificity
+from src.training.patient_metrics import bootstrap_patient_ci
 from src.training.subtype_loop import evaluate as evaluate_subtype
 from src.training.train import NUM_WORKERS, load_config, within_project
 
@@ -39,10 +42,30 @@ def _print_confusion_matrix(matrix, class_names) -> None:
         print(f"  actual {name:<{width}}{row}")
 
 
-def evaluate_binary_checkpoint(checkpoint_path, data_root, magnification, ratios, seed, batch_size):
+def _format_rate(value) -> str:
+    if not math.isfinite(value):
+        return "n/a"
+    return f"{value:.4f}"
+
+
+def _format_ci(interval) -> str:
+    low, high = interval
+    if not (math.isfinite(low) and math.isfinite(high)):
+        return "n/a"
+    return f"{low:.4f}-{high:.4f}"
+
+
+def evaluate_binary_checkpoint(
+    checkpoint_path, data_root, magnification, ratios, seed, batch_size, n_bootstrap: int = 1000
+):
     require_stain_normalization(data_root, checkpoint_stain_normalization(checkpoint_path))
     full_ds = BreakHisDataset(data_root, magnification=magnification)
-    _, _, test_patients = stratified_patient_split(full_ds.samples, ratios=ratios, seed=seed)
+    _, _, test_patients = resolve_patient_split(
+        full_ds.samples,
+        ratios=ratios,
+        seed=seed,
+        manifest_key=("binary", str(magnification)),
+    )
 
     test_ds = BreakHisDataset(data_root, magnification=magnification, transform=eval_transform())
     test_ds.samples = filter_samples_by_patients(test_ds.samples, test_patients)
@@ -53,20 +76,51 @@ def evaluate_binary_checkpoint(checkpoint_path, data_root, magnification, ratios
     load_checkpoint(checkpoint_path, model)
     model.eval()
 
-    metrics = evaluate_binary(
-        model,
-        DataLoader(test_ds, batch_size=batch_size, num_workers=NUM_WORKERS),
-        torch.nn.BCEWithLogitsLoss(),
-        "cpu",
+    patient_ids = [patient_id_of(sample) for sample in test_ds.samples]
+    labels = torch.tensor([sample["label"] for sample in test_ds.samples], dtype=torch.long)
+    # One forward. The patient interval is computed from these same predictions.
+    preds = _binary_preds(model, test_ds, batch_size)
+    precision, recall, f1 = precision_recall_f1(preds, labels)
+    sensitivity, specificity = sensitivity_specificity(preds, labels)
+    metrics = {
+        "accuracy": accuracy(preds, labels),
+        "precision": precision,
+        "recall": recall,
+        "f1": f1,
+        "sensitivity": sensitivity,
+        "specificity": specificity,
+        "confusion_matrix": confusion_matrix(preds, labels, num_classes=2),
+    }
+    metrics.update(
+        bootstrap_patient_ci(patient_ids, preds, labels, n_bootstrap=n_bootstrap, seed=seed)
     )
 
     print(f"\n=== Binary (benign vs malignant) — magnification {magnification}x ===")
+    print("  This split is reported only. It is not used to choose a checkpoint.")
     print(f"  test images   : {len(test_ds.samples)}")
-    print(f"  test patients : {len(test_patients)}")
+    print(f"  test patients : {len({patient_id_of(sample) for sample in test_ds.samples})}")
     for key in ("accuracy", "precision", "recall", "f1", "sensitivity", "specificity"):
-        print(f"  {key:<14}: {metrics[key]:.4f}")
+        print(f"  image {key:<12}: {metrics[key]:.4f}")
+    print(
+        f"  patient sensitivity : {_format_rate(metrics['patient_sensitivity'])} "
+        f"(95% CI {_format_ci(metrics['patient_sensitivity_ci95'])}, bootstrap over patients)"
+    )
+    print(
+        f"  patient specificity : {_format_rate(metrics['patient_specificity'])} "
+        f"(95% CI {_format_ci(metrics['patient_specificity_ci95'])}, bootstrap over patients)"
+    )
+    print("  image F1 is secondary. Selection uses patient sensitivity, then specificity.")
     _print_confusion_matrix(metrics["confusion_matrix"], BINARY_CLASS_NAMES)
     return metrics
+
+
+def _binary_preds(model, dataset, batch_size):
+    preds = []
+    loader = DataLoader(dataset, batch_size=batch_size, num_workers=NUM_WORKERS)
+    with torch.no_grad():
+        for images, _labels in loader:
+            preds.append((torch.sigmoid(model(images)) >= 0.5).long().view(-1).cpu())
+    return torch.cat(preds)
 
 
 def evaluate_subtype_checkpoint(checkpoint_path, data_root, ratios, seed, batch_size):
@@ -76,8 +130,12 @@ def evaluate_subtype_checkpoint(checkpoint_path, data_root, ratios, seed, batch_
     class_names = SUBTYPE_SCHEMES[scheme]["names"]
 
     full_ds = BreakHisSubtypeDataset(data_root, scheme=scheme)
-    _, _, test_patients = stratified_patient_split(
-        full_ds.samples, ratios=ratios, seed=seed, min_per_split=1
+    _, _, test_patients = resolve_patient_split(
+        full_ds.samples,
+        ratios=ratios,
+        seed=seed,
+        manifest_key=("subtype", scheme),
+        min_per_split=1,
     )
 
     test_ds = BreakHisSubtypeDataset(data_root, transform=eval_transform(), scheme=scheme)

@@ -5,15 +5,12 @@ both decided on the validation patients and only reported on the held-out
 test patients:
 
 1. Test-time augmentation (TTA): score the image in its 8 rotations and
-   flips (tissue has no "up") and average the logits. Rule: adopt it if,
-   pooled over all four magnifications, validation balanced accuracy rises
-   by at least one percentage point and sensitivity falls by at most one.
-
-   The first version of this rule had no minimum gain. TTA then "passed" on
-   a +0.3-point validation rise, while the held-out test set moved the other
-   way (balanced accuracy 76.6% -> 75.1%, benign specificity 57.5% -> 53.6%)
-   at 8x the inference cost. A 0.3-point change on ~1,400 images is noise,
-   so the minimum was added; this is recorded in the model card.
+   flips (tissue has no "up") and average the logits. Adopt it only when
+   the validation-patient utility says so: each magnification contributes
+   one patient-level sensitivity and specificity, those four are averaged,
+   and TTA wins when ``selection_rank`` is higher than the plain view.
+   The rank clears a sensitivity floor and then maximises specificity.
+   The held-out test set is printed afterwards and is not an input.
 
 2. Temperature scaling: one temperature T per magnification, fitted on
    validation logits (minimising log loss), so that the probability shown
@@ -36,10 +33,17 @@ import torch
 from torch.utils.data import DataLoader
 
 from src.data.dataset import BreakHisDataset
-from src.data.splits import filter_samples_by_patients, stratified_patient_split
+from src.data.manifest import patient_id_of, resolve_patient_split
+from src.data.splits import filter_samples_by_patients
 from src.data.transforms import eval_transform
 from src.serving.calibration import dihedral_views
 from src.serving.model_loader import get_model
+from src.training.patient_metrics import (
+    mean_rates,
+    patient_sensitivity_specificity,
+    prefer_alternative,
+    sensitivity_floor_from_config,
+)
 from src.training.train import NUM_WORKERS, load_config
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -47,8 +51,6 @@ DATA_ROOT = REPO_ROOT / "data" / "BreaKHis_v1"
 SERVING_DIR = REPO_ROOT / "serving_checkpoints"
 OUTPUT = SERVING_DIR / "calibration.json"
 MAGNIFICATIONS = ("40", "100", "200", "400")
-MAX_SENSITIVITY_DROP = 0.01
-MIN_BALANCED_ACCURACY_GAIN = 0.01
 # Logits are cached so re-running the decision doesn't rescore every image;
 # the cache is keyed by the checkpoints' hashes.
 LOGIT_CACHE = REPO_ROOT / "checkpoints" / "experiments" / "calibration_logits.npz"
@@ -65,7 +67,8 @@ def sha256(path: Path) -> str:
 
 @torch.no_grad()
 def logits(model, dataset):
-    """Plain and TTA-averaged logits, plus labels."""
+    """Plain and TTA-averaged logits, labels, and patient ids in dataset order."""
+    patient_ids = [patient_id_of(sample) for sample in dataset.samples]
     plain, averaged, labels = [], [], []
     for images, y in DataLoader(dataset, batch_size=16, num_workers=NUM_WORKERS):
         views = dihedral_views(images)  # (8, B, C, H, W)
@@ -73,7 +76,15 @@ def logits(model, dataset):
         plain.append(out[0])
         averaged.append(out.mean(0))
         labels.append(y)
-    return torch.cat(plain).numpy(), torch.cat(averaged).numpy(), torch.cat(labels).numpy()
+    labels_np = torch.cat(labels).numpy()
+    if len(labels_np) != len(patient_ids):
+        raise RuntimeError("logit dump and patient ids fell out of order; the loader must not shuffle")
+    return (
+        torch.cat(plain).numpy(),
+        torch.cat(averaged).numpy(),
+        labels_np,
+        np.asarray(patient_ids),
+    )
 
 
 def fit_temperature(z: np.ndarray, y: np.ndarray) -> float:
@@ -122,9 +133,10 @@ def _load_cached_logits(hashes: dict) -> dict:
     data = np.load(LOGIT_CACHE)
     cached = {}
     for m in MAGNIFICATIONS:
-        if f"{m}_sha256" in data and str(data[f"{m}_sha256"]) == hashes[m]:
+        patients_cached = f"{m}_val_patients" in data and f"{m}_test_patients" in data
+        if f"{m}_sha256" in data and str(data[f"{m}_sha256"]) == hashes[m] and patients_cached:
             cached[m] = {
-                split: tuple(data[f"{m}_{split}_{part}"] for part in ("plain", "tta", "labels"))
+                split: tuple(data[f"{m}_{split}_{part}"] for part in ("plain", "tta", "labels", "patients"))
                 for split in ("val", "test")
             }
     return cached
@@ -135,7 +147,7 @@ def _save_cached_logits(per_mag: dict, hashes: dict) -> None:
     for m, splits in per_mag.items():
         arrays[f"{m}_sha256"] = np.array(hashes[m])
         for split, parts in splits.items():
-            for part, values in zip(("plain", "tta", "labels"), parts, strict=True):
+            for part, values in zip(("plain", "tta", "labels", "patients"), parts, strict=True):
                 arrays[f"{m}_{split}_{part}"] = values
     LOGIT_CACHE.parent.mkdir(parents=True, exist_ok=True)
     np.savez(LOGIT_CACHE, **arrays)
@@ -150,8 +162,11 @@ def main() -> None:
         if magnification in per_mag:
             continue
         ds = BreakHisDataset(DATA_ROOT, magnification=magnification)
-        _, val, test = stratified_patient_split(
-            ds.samples, ratios=(r["train"], r["val"], r["test"]), seed=config["seed"]
+        _, val, test = resolve_patient_split(
+            ds.samples,
+            ratios=(r["train"], r["val"], r["test"]),
+            seed=config["seed"],
+            manifest_key=("binary", magnification),
         )
         model = get_model(str(SERVING_DIR / f"best_mag{magnification}.pt"))
         splits = {}
@@ -164,17 +179,31 @@ def main() -> None:
         print(f"{magnification}x: scored {counts}", flush=True)
     _save_cached_logits(per_mag, hashes)
 
-    def pooled(split, which):  # which: 0 = plain, 1 = TTA
+    def pooled(split, which):  # which: 0 = plain, 1 = TTA. Report only; not the TTA decision.
         z = np.concatenate([per_mag[m][split][which] for m in MAGNIFICATIONS])
         y = np.concatenate([per_mag[m][split][2] for m in MAGNIFICATIONS])
         return z, y
 
-    plain_val, tta_val = rates(*pooled("val", 0)), rates(*pooled("val", 1))
-    use_tta = (
-        tta_val["balanced_accuracy"] - plain_val["balanced_accuracy"] >= MIN_BALANCED_ACCURACY_GAIN
-        and plain_val["sensitivity"] - tta_val["sensitivity"] <= MAX_SENSITIVITY_DROP
+    def patient_rates(split, which):
+        """One (sensitivity, specificity) pair per magnification, then an unweighted mean."""
+        per_magnification = []
+        for magnification in MAGNIFICATIONS:
+            logits_m = per_mag[magnification][split][which]
+            labels = per_mag[magnification][split][2]
+            patients = per_mag[magnification][split][3]
+            per_magnification.append(patient_sensitivity_specificity(patients, logits_m >= 0, labels))
+        return mean_rates(per_magnification)
+
+    # Validation patients only. Test logits are scored later as a report.
+    floor = sensitivity_floor_from_config(load_config(REPO_ROOT / "configs" / "train.yaml"))
+    plain_patient = patient_rates("val", 0)
+    tta_patient = patient_rates("val", 1)
+    use_tta = prefer_alternative(plain_patient, tta_patient, floor)
+    print(
+        f"\nvalidation patients, plain sensitivity/specificity: {plain_patient}\n"
+        f"validation patients, TTA:                          {tta_patient}\n"
+        f"sensitivity floor {floor:.2f} -> use TTA: {use_tta}"
     )
-    print(f"\nvalidation, plain: {plain_val}\nvalidation, TTA:   {tta_val}\n-> use TTA: {use_tta}")
     which = 1 if use_tta else 0
 
     calibration = {"tta": use_tta, "models": {}}
@@ -191,6 +220,7 @@ def main() -> None:
         checkpoint = SERVING_DIR / f"best_mag{magnification}.pt"
         calibration["models"][checkpoint.name] = {"temperature": temperature, "sha256": hashes[magnification]}
 
+    print("\nHeld-out test rates are a report. They do not choose TTA or the temperature.")
     for name, which_ in (("plain", 0), ("TTA", 1)):
         print(f"held-out test, {name}: {rates(*pooled('test', which_))}")
 

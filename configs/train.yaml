@@ -11,3 +11,8 @@ early_stopping:
   min_delta: 0.001
 freeze_backbone_epochs: 2
 checkpoint_dir: checkpoints
+# Patient-level selection: an epoch is eligible when validation sensitivity
+# is at least this high; among eligible epochs, the highest specificity is kept.
+# Image-level F1 is logged and is not the selection key.
+selection:
+  sensitivity_floor: 0.95

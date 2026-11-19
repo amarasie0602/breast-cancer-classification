@@ -83,18 +83,18 @@ flowchart LR
     subgraph Train["Training  (local, CPU)"]
         DS[("BreakHis dataset<br/>DVC-tracked")] --> TR["train.py (binary, ResNet50)<br/>train_subtype.py (subtype, EfficientNet-B0)<br/>transfer learning"]
         TR -->|"params + per-epoch metrics"| ML[("MLflow tracking")]
-        TR -->|"saves on F1 improvement"| CK["checkpoints/best_mag*.pt<br/>checkpoints/best_subtype.pt<br/>(~280MB, with optimizer state)"]
+        TR -->|"saves on patient-level utility"| CK["checkpoints/best_mag*.pt<br/>checkpoints/best_subtype.pt<br/>(~280MB, with optimizer state)"]
         CK -->|"export_serving_checkpoints<br/>(drops optimizer state)"| SV["serving_checkpoints/<br/>4 binary models + subtype<br/>(~95MB each)"]
     end
 
-    CK -->|"dvc push (all checkpoints)"| REMOTE[("DVC remote<br/>(local-path, this machine)")]
+    CK -->|"dvc push (all checkpoints)"| REMOTE[("DVC remote<br/>(Google Drive folder)")]
     SV -->|"git push via Git LFS"| GH[("GitHub repo")]
     SV -.->|"pytest, run locally<br/>gate: F1 ≥ 0.75"| GATE["model-validation"]
 
     subgraph CI["CI — every push"]
         GH --> LINT["lint"]
         GH --> TEST["pytest"]
-        GH --> CIGATE["model-validation<br/>(skips: no DVC access on runner)"]
+        GH --> CIGATE["model-validation<br/>(LFS + fails if the gate skips)"]
         GH --> SMOKE["smoke-train<br/>(synthetic data)"]
         GH --> DBUILD["docker build check<br/>(lfs: true)"]
     end
@@ -109,12 +109,13 @@ flowchart LR
     API -->|"label + subtype + Grad-CAM overlay"| CLIENT["client"]
 ```
 
-The model-validation gate is real and does enforce a minimum F1 — but
-today only where the checkpoint is actually reachable (locally, or
-anywhere with `dvc pull` access to the remote). The GitHub Actions runner
-has no credentials for this project's local-path DVC remote, so its copy
-of that job still skips; wiring a cloud DVC remote (S3/GCS) would close
-that gap.
+The model-validation job checks out Git LFS and, when the
+`GDRIVE_SERVICE_ACCOUNT_JSON` secret is set, pulls the dataset from the
+Google Drive remote in `.dvc/config`. The gate scores validation patients
+and fails the job if those tests skip, including when the secret or the
+folder id is still missing. See `data/README.md` for the one-time
+`dvc remote modify` / `dvc push` commands. The folder id in `.dvc/config`
+is a placeholder until that setup is done.
 
 ```
 data/BreaKHis_v1/          Raw dataset (DVC-tracked, not in Git)
@@ -158,9 +159,15 @@ docker compose up --build
 
 ## Results
 
-Per-magnification comparison — the project's headline finding. ResNet50,
-transfer learning, patient-level 70/15/15 split, held-out **test** set
-(never used for training or checkpoint selection):
+Per-magnification comparison below is the **previous image-level test report**,
+from checkpoints chosen by image-level malignant F1. Current selection uses
+validation patients (sensitivity floor, then specificity). The replacement
+table, with patient-level rates and bootstrap intervals, is in
+[docs/model_card.md](docs/model_card.md#results) and its cells are marked
+to be regenerated. These older image-level numbers are not a selection result.
+
+ResNet50, transfer learning, patient-level 70/15/15 split, held-out **test**
+set:
 
 | Magnification | F1 | Accuracy | Precision | Sensitivity | Specificity |
 | -------------- | ---- | -------- | --------- | ----------- | ----------- |
@@ -193,12 +200,12 @@ matrices and the full discussion.
 ## CI/CD
 
 **CI** (`.github/workflows/ci.yml`) runs on every push/PR: lint (ruff),
-the full pytest suite, a model-validation job that gates on minimum F1
-(skips gracefully if no checkpoint is present, but runs for real and
-enforces the threshold once one exists — see Results below), a smoke-train
-job that runs the actual training CLI end-to-end on a tiny synthetic
-dataset, and a Docker build check to catch container-breaking changes
-before merge.
+the full pytest suite, a model-validation job that checks out Git LFS and
+scores validation patients (F1, sensitivity and specificity). A missing
+checkpoint or a missing dataset fails that job instead of skipping it.
+The dataset pull runs when `GDRIVE_SERVICE_ACCOUNT_JSON` is set. A smoke-train
+job runs the training CLI end-to-end on a tiny synthetic dataset, and a
+Docker build check catches container-breaking changes before merge.
 
 **CD** (`.github/workflows/cd.yml`) builds the serving image and pushes it to
 GitHub Container Registry (`ghcr.io/<owner>/breast-cancer-classification`) on

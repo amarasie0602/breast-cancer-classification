@@ -25,7 +25,7 @@ from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
 
 from src.data.dataset import BreakHisDataset
-from src.data.splits import stratified_patient_split
+from src.data.manifest import resolve_patient_split
 from src.data.transforms import IMAGE_SIZE, IMAGENET_MEAN, IMAGENET_STD, eval_transform
 from src.serving.magnification import MAGNIFICATIONS, build_network
 from src.training.train import NUM_WORKERS, load_config
@@ -74,8 +74,11 @@ def split_samples():
     splits = {"train": [], "val": [], "test": []}
     for magnification in MAGNIFICATIONS:
         ds = BreakHisDataset(DATA_ROOT, magnification=magnification)
-        train, val, test = stratified_patient_split(
-            ds.samples, ratios=(r["train"], r["val"], r["test"]), seed=config["seed"]
+        train, val, test = resolve_patient_split(
+            ds.samples,
+            ratios=(r["train"], r["val"], r["test"]),
+            seed=config["seed"],
+            manifest_key=("binary", magnification),
         )
         split_of = {
             **dict.fromkeys(train, "train"),

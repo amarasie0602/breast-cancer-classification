@@ -1,0 +1,9 @@
+# Copy to .dvc/config.local (gitignored) when CI or a headless machine
+# must authenticate. Do not commit the copy. Interactive `dvc push` on a
+# laptop uses DVC's browser login and does not need this file.
+#
+# The service-account JSON itself stays outside the repo. Share the Drive
+# folder with the service account's email.
+['remote "gdrive"']
+    gdrive_use_service_account = true
+    gdrive_service_account_json_file_path = /absolute/path/outside/the/repo/service-account.json

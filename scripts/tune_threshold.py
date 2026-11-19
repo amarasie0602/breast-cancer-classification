@@ -20,7 +20,8 @@ import torch
 from torch.utils.data import DataLoader
 
 from src.data.dataset import BreakHisDataset
-from src.data.splits import filter_samples_by_patients, stratified_patient_split
+from src.data.manifest import resolve_patient_split
+from src.data.splits import filter_samples_by_patients
 from src.data.transforms import eval_transform
 from src.models.classifier import BreakHisClassifier
 from src.training.checkpoint import load_checkpoint
@@ -72,8 +73,11 @@ def main() -> None:
     ratios = (r["train"], r["val"], r["test"])
 
     full_ds = BreakHisDataset(args.data_root, magnification=args.magnification)
-    _, val_patients, _ = stratified_patient_split(
-        full_ds.samples, ratios=ratios, seed=data_config["seed"]
+    _, val_patients, _ = resolve_patient_split(
+        full_ds.samples,
+        ratios=ratios,
+        seed=data_config["seed"],
+        manifest_key=("binary", args.magnification),
     )
 
     val_ds = BreakHisDataset(

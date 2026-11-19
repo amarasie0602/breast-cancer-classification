@@ -275,37 +275,65 @@ has as few as 135 images at a single magnification).
 
 ## Results
 
-ResNet50, transfer learning (ImageNet-pretrained), 10 epochs with early
-stopping, patient-level 70/15/15 train/val/test split, evaluated per
-magnification. Two views are reported because they disagree in an
-instructive way:
+Checkpoint selection uses **validation patients only**. A binary epoch is
+kept when its patient-level sensitivity clears the floor in
+`configs/train.yaml` (`selection.sensitivity_floor`, default 0.95) and,
+among those epochs, its patient-level specificity is highest. Image-level
+malignant F1 is still logged. It is not the selection key. The same utility
+decides whether test-time augmentation is adopted
+(`scripts/calibrate_serving.py`) and is the rule for any future stain or
+class-balance comparison. The held-out test set is not an input to those
+decisions.
 
-**Validation set** (used for checkpoint/model selection during training):
+Each patient casts one vote: the patient is called malignant when at least
+half of that patient's images are. `scripts/evaluate_test_set.py` prints
+patient-level sensitivity and specificity with a 95% interval from a
+bootstrap that resamples patients.
 
-| Magnification | Val F1 | Val Accuracy |
-| -------------- | ------ | ------------ |
-| 40x            | 0.939  | 0.918        |
-| 100x           | 0.935  | 0.917        |
-| 400x           | 0.915  | 0.886        |
-| 200x           | 0.905  | 0.878        |
+The cells in the current tables are **to be regenerated**. This change did
+not retrain or re-score BreakHis, so no new number is filled in. After
+`splits/patients.json` exists:
 
-**Held-out test set** (never used for training or checkpoint selection —
-the honest number). Regenerate with
-`python -m scripts.evaluate_test_set --magnification 40`:
+    python -m src.training.train --data-root data/BreaKHis_v1 --magnification 40
+    python -m scripts.evaluate_test_set --magnification 40
 
-| Magnification | F1 | Accuracy | Precision | Sensitivity | **Specificity** | Images | Patients |
-| -------------- | ---- | -------- | --------- | ----------- | --------------- | ------ | -------- |
-| 200x           | 0.952 | 0.925   | 0.916     | 0.990       | **0.732**       | 281    | 11       |
-| 40x            | 0.901 | 0.848   | 0.838     | 0.974       | **0.544**       | 270    | 11       |
-| 400x           | 0.882 | 0.819   | 0.796     | 0.988       | **0.461**       | 238    | 11       |
-| 100x           | 0.861 | 0.796   | 0.841     | 0.882       | **0.575**       | 284    | 11       |
+Repeat for 100, 200 and 400. Then replace every "to be regenerated" cell
+from that output.
+
+**Validation set** (the selection set). Image F1 is secondary.
+
+| Magnification | Patient sensitivity | Patient specificity | Image F1 (secondary) | Image accuracy |
+| --- | --- | --- | --- | --- |
+| 40x | to be regenerated | to be regenerated | to be regenerated | to be regenerated |
+| 100x | to be regenerated | to be regenerated | to be regenerated | to be regenerated |
+| 200x | to be regenerated | to be regenerated | to be regenerated | to be regenerated |
+| 400x | to be regenerated | to be regenerated | to be regenerated | to be regenerated |
+
+**Held-out test set** (reported once, after the checkpoint, the temperature
+and the augmentation decision are frozen). Patient intervals are the
+patient-clustered 95% CI.
+
+| Magnification | Image F1 (secondary) | Image sensitivity | Image specificity | Patient sensitivity (95% CI) | Patient specificity (95% CI) | Images | Patients |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 40x | to be regenerated | to be regenerated | to be regenerated | to be regenerated | to be regenerated | to be regenerated | to be regenerated |
+| 100x | to be regenerated | to be regenerated | to be regenerated | to be regenerated | to be regenerated | to be regenerated | to be regenerated |
+| 200x | to be regenerated | to be regenerated | to be regenerated | to be regenerated | to be regenerated | to be regenerated | to be regenerated |
+| 400x | to be regenerated | to be regenerated | to be regenerated | to be regenerated | to be regenerated | to be regenerated | to be regenerated |
+
+### Previous image-level report
+
+Earlier tables on this page were image-level scores from checkpoints chosen
+by image-level malignant F1. They are not the result of the utility above
+and are not repeated as current numbers. The historical image-level test
+sensitivity was about 0.88–0.99 and image-level specificity about 0.46–0.73.
+Read that as history until the table above is filled. The confusion matrices
+below are that same older, image-level report.
 
 ### The specificity problem
 
-**This is the most important number on the page, and F1 hides it.** The
-model catches nearly every malignant case (sensitivity 0.88-0.99) but
-misclassifies roughly half of all benign tissue as malignant. Confusion
-matrices, rows = actual:
+**Specificity is the number image-level F1 hides.** On that older report the
+model caught nearly every malignant image and misclassified roughly half of
+benign images. Confusion matrices from that report, rows = actual:
 
 ```
         40x                        400x
@@ -378,14 +406,13 @@ are tied to each checkpoint's SHA-256, and a test fails if a model changes
 without recalibrating.
 
 Averaging over each image's 8 rotations and flips (test-time augmentation)
-was also tried. The rule, written before running, adopted it if validation
-balanced accuracy rose with sensitivity down at most one point, and it
-"passed" on a 0.3-point rise (89.1% to 89.4%). The held-out test set moved
-the other way (76.6% to 75.1%; benign specificity 57.5% to 53.6%), at 8x the
-inference cost. A 0.3-point change on ~1,400 images is noise, and the rule
-had no minimum, so it now requires a one-point gain and TTA is not used.
-That is a change made after seeing a test result, and is recorded here for
-that reason.
+is adopted only when the validation-patient utility ranks it above the
+plain view (sensitivity floor, then specificity), averaged across the four
+magnifications. The held-out test set is not an input. An earlier rule was
+revised after looking at the test set; that revision is retired. Whether
+the shipped `calibration.json` still has `"tta": false` is historical.
+Re-run `python -m scripts.calibrate_serving` and record the new validation
+sensitivity and specificity here. Those cells are **to be regenerated**.
 
 ### Threshold tuning was tried, and rejected
 
@@ -416,8 +443,15 @@ clinical judgement this project can inform but shouldn't quietly make.
 
 ### Class-balanced retraining was tried, and not adopted
 
+The comparison below is the **previous image-level test report**. It is not
+a current selection result. A new balanced run is accepted only when its
+validation-patient utility beats the unweighted run (sensitivity floor, then
+specificity). Recompute that comparison and replace the cells; they are
+**to be regenerated** under the new rule. The historical numbers, which must
+not be used to pick a model, were:
+
 Retraining the 200x model with class-balanced sampling
-(`configs/train_balanced.yaml`) against the same held-out test split:
+(`configs/train_balanced.yaml`) was previously scored on the held-out test split:
 
 | 200x, test set | Original | Balanced |
 | --- | --- | --- |
@@ -442,8 +476,11 @@ With ~60 training patients per magnification, a patient's slide colour could
 stand in for its label, so all four models were retrained on Macenko
 stain-normalized images (`src/data/stain.py`, `configs/train_stain_macenko.yaml`):
 same hyperparameters, same patient split, only the colour space changed. The
-rule for adopting a model was fixed before any result was seen: higher test
-specificity, with sensitivity no more than one percentage point lower.
+old adoption rule looked at **test** specificity. That rule is retired.
+A stain model is adopted only when the validation-patient utility beats the
+raw-image model. The table is the previous image-level test report, not a
+selection result. Recompute it on validation patients. The decision cells
+are **to be regenerated**.
 
 | Test set | Specificity: original → normalized | Sensitivity: original → normalized | False alarms | Missed cancers |
 | --- | --- | --- | --- | --- |

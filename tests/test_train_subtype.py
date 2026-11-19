@@ -1,4 +1,44 @@
+from src.training.checkpoint import load_checkpoint
 from src.training.train_subtype import run_training
+
+
+def test_run_training_keeps_patient_macro_f1_over_higher_image_macro_f1(
+    breakhis_root_all_subtypes, tmp_path, monkeypatch
+):
+    """Image-level macro F1 is logged and is not what decides the saved epoch."""
+    monkeypatch.chdir(tmp_path)
+    import mlflow
+
+    mlflow.set_tracking_uri(f"sqlite:///{tmp_path / 'mlflow.db'}")
+    monkeypatch.setattr("src.training.train_subtype.train_one_epoch", lambda *args, **kwargs: 0.1)
+    scripted = [
+        {"loss": 0.5, "accuracy": 0.9, "macro_f1": 0.90, "patient_macro_f1": 0.10},
+        {"loss": 0.4, "accuracy": 0.2, "macro_f1": 0.20, "patient_macro_f1": 0.60},
+    ]
+    monkeypatch.setattr("src.training.train_subtype.evaluate", lambda *args, **kwargs: scripted.pop(0))
+
+    run_training(
+        {
+            "epochs": 2,
+            "batch_size": 2,
+            "learning_rate": 1e-4,
+            "weight_decay": 1e-5,
+            "lr_scheduler": {"patience": 1, "factor": 0.5},
+            "early_stopping": {"patience": 5, "min_delta": 0.0},
+            "freeze_backbone_epochs": 0,
+            "checkpoint_dir": str(tmp_path / "checkpoints"),
+        },
+        breakhis_root_all_subtypes,
+        split_ratios=(0.5, 0.5, 0.0),
+        pretrained=False,
+    )
+
+    from src.models.classifier import MalignantSubtypeClassifier
+
+    model = MalignantSubtypeClassifier(num_classes=4, pretrained=False)
+    _, metrics = load_checkpoint(tmp_path / "checkpoints" / "best_subtype.pt", model)
+    assert metrics["macro_f1"] == 0.20
+    assert metrics["patient_macro_f1"] == 0.60
 
 
 def test_run_training_end_to_end_smoke(breakhis_root_all_subtypes, tmp_path, monkeypatch):

@@ -33,12 +33,35 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          lfs: true
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.11"
           cache: "pip"
       - run: "pip install --require-hashes --only-binary :all: --no-binary antlr4-python3-runtime -r requirements.lock.txt"
-      - run: pytest tests/test_model_validation.py tests/test_subtype_validation.py -v
+      # Weights come from Git LFS. The dataset comes from the Google Drive
+      # remote in .dvc/config. Without the service-account secret the pull is
+      # skipped and the gate fails closed (CI_REQUIRE_MODEL_GATE), instead of
+      # reporting success for a test that never scored a model.
+      - name: Pull BreakHis and checkpoints when Drive credentials exist
+        env:
+          GDRIVE_SERVICE_ACCOUNT_JSON: ${{ secrets.GDRIVE_SERVICE_ACCOUNT_JSON }}
+        run: |
+          if [ -z "$GDRIVE_SERVICE_ACCOUNT_JSON" ]; then
+            echo "GDRIVE_SERVICE_ACCOUNT_JSON is unset. The quality gate will fail until data can be pulled."
+            exit 0
+          fi
+          python -m pip install 'dvc[gdrive]==3.67.1'
+          creds="$RUNNER_TEMP/gdrive-sa.json"
+          printf '%s' "$GDRIVE_SERVICE_ACCOUNT_JSON" > "$creds"
+          dvc remote modify --local gdrive gdrive_use_service_account true
+          dvc remote modify --local gdrive gdrive_service_account_json_file_path "$creds"
+          dvc pull data/BreaKHis_v1.dvc checkpoints.dvc
+      - name: Validation-patient quality gate
+        env:
+          CI_REQUIRE_MODEL_GATE: "1"
+        run: pytest tests/test_model_validation.py tests/test_subtype_validation.py -rs
 
   smoke-train:
     runs-on: ubuntu-latest
