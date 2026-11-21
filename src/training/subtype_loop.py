@@ -4,13 +4,14 @@ classifier's single-logit BCEWithLogitsLoss shape (float labels, unsqueeze)
 is fundamentally different from CrossEntropyLoss's multi-class shape
 (integer labels, argmax over class logits)."""
 
-from typing import Dict
+from typing import Dict, Sequence
 
 import torch
 from torch import nn
 from torch.utils.data import DataLoader
 
 from src.training.metrics import accuracy, confusion_matrix, multiclass_precision_recall_f1
+from src.training.patient_metrics import patient_level_predictions
 
 
 def train_one_epoch(
@@ -38,7 +39,12 @@ def train_one_epoch(
 
 @torch.no_grad()
 def evaluate(
-    model: nn.Module, dataloader: DataLoader, criterion: nn.Module, device: str, num_classes: int
+    model: nn.Module,
+    dataloader: DataLoader,
+    criterion: nn.Module,
+    device: str,
+    num_classes: int,
+    patient_ids: Sequence[str] | None = None,
 ) -> Dict[str, object]:
     if len(dataloader.dataset) == 0:
         raise ValueError("evaluate received an empty dataset")
@@ -63,7 +69,7 @@ def evaluate(
     labels = torch.cat(all_labels)
     precisions, recalls, f1s, macro_f1 = multiclass_precision_recall_f1(preds, labels, num_classes)
 
-    return {
+    metrics: Dict[str, object] = {
         "loss": total_loss / len(dataloader.dataset),
         "accuracy": accuracy(preds, labels),
         "macro_f1": macro_f1,
@@ -72,3 +78,15 @@ def evaluate(
         "per_class_f1": f1s,
         "confusion_matrix": confusion_matrix(preds, labels, num_classes),
     }
+    if patient_ids is not None:
+        if len(patient_ids) != len(labels):
+            raise ValueError(
+                f"patient_ids has length {len(patient_ids)} but evaluation saw {len(labels)} images. "
+                "The validation loader must not shuffle."
+            )
+        patient_preds, patient_labels = patient_level_predictions(patient_ids, preds, labels, num_classes)
+        _, _, _, patient_macro_f1 = multiclass_precision_recall_f1(
+            torch.as_tensor(patient_preds), torch.as_tensor(patient_labels), num_classes
+        )
+        metrics["patient_macro_f1"] = patient_macro_f1
+    return metrics

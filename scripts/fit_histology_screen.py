@@ -25,7 +25,7 @@ from PIL import Image
 from torchvision.models import EfficientNet_B0_Weights, efficientnet_b0
 
 from src.data.dataset import BreakHisDataset
-from src.data.splits import stratified_patient_split
+from src.data.manifest import resolve_patient_split
 from src.serving.ood import FeatureDistance, HistologyScreen, stats_path_for
 from src.training.train import load_config
 
@@ -45,8 +45,11 @@ def _images_by_split():
     paths = {"train": [], "val": [], "test": []}
     for magnification in MAGNIFICATIONS:
         ds = BreakHisDataset(DATA_ROOT, magnification=magnification)
-        train, val, test = stratified_patient_split(
-            ds.samples, ratios=(r["train"], r["val"], r["test"]), seed=config["seed"]
+        train, val, test = resolve_patient_split(
+            ds.samples,
+            ratios=(r["train"], r["val"], r["test"]),
+            seed=config["seed"],
+            manifest_key=("binary", magnification),
         )
         split_of = {
             **dict.fromkeys(train, "train"),

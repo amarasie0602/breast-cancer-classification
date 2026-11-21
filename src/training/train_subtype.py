@@ -20,13 +20,16 @@ from torch import nn, optim
 from torch.utils.data import DataLoader, WeightedRandomSampler
 
 from src.data.dataset import DEFAULT_SUBTYPE_SCHEME, SUBTYPE_SCHEMES, BreakHisSubtypeDataset
-from src.data.splits import filter_samples_by_patients, stratified_patient_split
+from src.data.manifest import patient_id_of, resolve_patient_split
+from src.data.splits import filter_samples_by_patients
 from src.data.transforms import eval_transform, strong_train_transform
 from src.models.classifier import MalignantSubtypeClassifier
 from src.training.checkpoint import save_checkpoint
 from src.training.early_stopping import EarlyStopping
+from src.training.patient_metrics import is_logged_metric
 from src.training.subtype_loop import evaluate, train_one_epoch
 from src.training.train import NUM_WORKERS, load_config
+
 
 def build_dataloaders(
     data_root: str | Path,
@@ -40,8 +43,12 @@ def build_dataloaders(
     # min_per_split=1: lobular_carcinoma has only 5 patients in all of
     # BreakHis, and plain ratio rounding leaves it with 0 test patients --
     # i.e. a class the test set literally cannot measure.
-    train_patients, val_patients, _ = stratified_patient_split(
-        full_ds.samples, ratios=tuple(split_ratios), seed=seed, min_per_split=1
+    train_patients, val_patients, _ = resolve_patient_split(
+        full_ds.samples,
+        ratios=tuple(split_ratios),
+        seed=seed,
+        manifest_key=("subtype", scheme),
+        min_per_split=1,
     )
 
     train_ds = BreakHisSubtypeDataset(data_root, transform=strong_train_transform(), scheme=scheme)
@@ -115,7 +122,10 @@ def run_training(
 
     checkpoint_dir = Path(config["checkpoint_dir"])
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
-    best_macro_f1 = -1.0
+    # Patient-level macro F1 is the selection key. Image-level macro F1 is
+    # still logged as val_macro_f1.
+    best_patient_macro_f1 = -1.0
+    val_patient_ids = [patient_id_of(sample) for sample in val_loader.dataset.samples]
 
     with mlflow.start_run():
         mlflow.set_tags(
@@ -136,19 +146,22 @@ def run_training(
                 model.unfreeze_backbone()
 
             train_loss = train_one_epoch(model, train_loader, optimizer, criterion, device)
-            val_metrics = evaluate(model, val_loader, criterion, device, num_classes=num_classes)
+            val_metrics = evaluate(
+                model, val_loader, criterion, device, num_classes=num_classes, patient_ids=val_patient_ids
+            )
             scheduler.step(val_metrics["loss"])
 
             mlflow.log_metric("train_loss", train_loss, step=epoch)
             for key, value in val_metrics.items():
-                if key in ("confusion_matrix", "per_class_precision", "per_class_recall", "per_class_f1"):
-                    continue  # not scalars; skip MLflow metric logging
-                mlflow.log_metric(f"val_{key}", value, step=epoch)
+                if is_logged_metric(key, value):
+                    mlflow.log_metric(f"val_{key}", value, step=epoch)
 
-            if val_metrics["macro_f1"] > best_macro_f1:
-                best_macro_f1 = val_metrics["macro_f1"]
+            if val_metrics["patient_macro_f1"] > best_patient_macro_f1:
+                best_patient_macro_f1 = val_metrics["patient_macro_f1"]
                 # The label scheme travels with the weights: serving needs it
                 # to build the right-sized head and name the classes.
+                # macro_f1 here is the image-level secondary metric; the gate
+                # recomputes its own score and does not trust this field.
                 save_checkpoint(
                     checkpoint_dir / checkpoint_name,
                     model,
@@ -160,7 +173,7 @@ def run_training(
             if early_stopping.step(val_metrics["loss"]):
                 break
 
-    return best_macro_f1
+    return best_patient_macro_f1
 
 
 def main() -> None:

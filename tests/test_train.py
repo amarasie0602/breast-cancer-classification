@@ -21,6 +21,52 @@ def test_load_config_rejects_path_outside_cwd(tmp_path, monkeypatch):
         load_config("../../../../etc/passwd")
 
 
+def _scripted_epoch(f1, patient_sensitivity, patient_specificity, loss):
+    return {
+        "loss": loss,
+        "accuracy": f1,
+        "precision": f1,
+        "recall": patient_sensitivity,
+        "f1": f1,
+        "sensitivity": patient_sensitivity,
+        "specificity": patient_specificity,
+        "patient_sensitivity": patient_sensitivity,
+        "patient_specificity": patient_specificity,
+    }
+
+
+def test_run_training_keeps_patient_utility_over_higher_image_f1(
+    breakhis_root_multi_patient, tmp_path, monkeypatch
+):
+    """Epoch 2 has the lower image F1 and the better patient-level rank, so it is the checkpoint."""
+    monkeypatch.chdir(tmp_path)
+    import mlflow
+
+    mlflow.set_tracking_uri(f"sqlite:///{tmp_path / 'mlflow.db'}")
+    monkeypatch.setattr("src.training.train.train_one_epoch", lambda *args, **kwargs: 0.1)
+    scripted = [
+        _scripted_epoch(f1=0.99, patient_sensitivity=0.99, patient_specificity=0.40, loss=0.5),
+        _scripted_epoch(f1=0.50, patient_sensitivity=0.96, patient_specificity=0.80, loss=0.4),
+    ]
+    monkeypatch.setattr("src.training.train.evaluate", lambda *args, **kwargs: scripted.pop(0))
+
+    run_training(
+        _tiny_config(tmp_path, epochs=2, selection={"sensitivity_floor": 0.95}),
+        breakhis_root_multi_patient,
+        magnification="40",
+        split_ratios=(0.5, 0.25, 0.25),
+        pretrained=False,
+    )
+
+    from src.training.checkpoint import load_checkpoint
+    from src.models.classifier import BreakHisClassifier
+
+    model = BreakHisClassifier(pretrained=False)
+    _, metrics = load_checkpoint(tmp_path / "checkpoints" / "best_mag40.pt", model)
+    assert metrics["f1"] == 0.50
+    assert metrics["patient_specificity"] == 0.80
+
+
 def test_run_training_end_to_end_smoke(breakhis_root_multi_patient, tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
 

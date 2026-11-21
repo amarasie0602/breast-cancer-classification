@@ -9,13 +9,15 @@ from torch import nn, optim
 from torch.utils.data import DataLoader, WeightedRandomSampler
 
 from src.data.dataset import BreakHisDataset
-from src.data.splits import filter_samples_by_patients, stratified_patient_split
+from src.data.manifest import patient_id_of, resolve_patient_split
+from src.data.splits import filter_samples_by_patients
 from src.data.stain import require_stain_normalization
 from src.data.transforms import eval_transform, train_transform
 from src.models.classifier import BreakHisClassifier
 from src.training.checkpoint import save_checkpoint
 from src.training.early_stopping import EarlyStopping
 from src.training.loop import evaluate, train_one_epoch
+from src.training.patient_metrics import is_logged_metric, selection_rank, sensitivity_floor_from_config
 
 # Data is loaded in the main process. Every result in docs/model_card.md was
 # produced this way; it is stated explicitly so changing it is a deliberate
@@ -54,8 +56,11 @@ def build_dataloaders(
     balance_classes: bool = False,
 ) -> Tuple[DataLoader, DataLoader]:
     full_ds = BreakHisDataset(data_root, magnification=magnification)
-    train_patients, val_patients, _ = stratified_patient_split(
-        full_ds.samples, ratios=tuple(split_ratios), seed=seed
+    train_patients, val_patients, _ = resolve_patient_split(
+        full_ds.samples,
+        ratios=tuple(split_ratios),
+        seed=seed,
+        manifest_key=("binary", str(magnification)),
     )
 
     train_ds = BreakHisDataset(data_root, magnification=magnification, transform=train_transform())
@@ -133,7 +138,12 @@ def run_training(
 
     checkpoint_dir = Path(config["checkpoint_dir"])
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
+    # Image-level F1 of the checkpoint that won the patient-level utility.
+    # It is a secondary number: selection itself uses selection_rank.
     best_f1 = -1.0
+    best_rank: tuple | None = None
+    floor = sensitivity_floor_from_config(config)
+    val_patient_ids = [patient_id_of(sample) for sample in val_loader.dataset.samples]
 
     with mlflow.start_run():
         mlflow.set_tags({"magnification": magnification, "model_variant": "resnet50"})
@@ -144,6 +154,8 @@ def run_training(
                 "batch_size": config["batch_size"],
                 "weight_decay": config["weight_decay"],
                 "stain_normalization": stain_normalization or "none",
+                "sensitivity_floor": floor,
+                "selection": "patient_sensitivity_floor_then_specificity",
             }
         )
 
@@ -153,16 +165,19 @@ def run_training(
                 model.unfreeze_backbone()
 
             train_loss = train_one_epoch(model, train_loader, optimizer, criterion, device)
-            val_metrics = evaluate(model, val_loader, criterion, device)
+            val_metrics = evaluate(model, val_loader, criterion, device, patient_ids=val_patient_ids)
             scheduler.step(val_metrics["loss"])
 
             mlflow.log_metric("train_loss", train_loss, step=epoch)
             for key, value in val_metrics.items():
-                if key == "confusion_matrix":  # not a scalar; skip MLflow metric logging
-                    continue
-                mlflow.log_metric(f"val_{key}", value, step=epoch)
+                if is_logged_metric(key, value):
+                    mlflow.log_metric(f"val_{key}", value, step=epoch)
 
-            if val_metrics["f1"] > best_f1:
+            rank = selection_rank(
+                val_metrics["patient_sensitivity"], val_metrics["patient_specificity"], floor
+            )
+            if best_rank is None or rank > best_rank:
+                best_rank = rank
                 best_f1 = val_metrics["f1"]
                 save_checkpoint(
                     checkpoint_dir / f"best_mag{magnification}.pt",

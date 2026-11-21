@@ -1,4 +1,4 @@
 [core]
-    remote = localstorage
-['remote "localstorage"']
-    url = ../../breast-cancer-dvc-storage
+    remote = gdrive
+['remote "gdrive"']
+    url = gdrive://REPLACE_WITH_GOOGLE_DRIVE_FOLDER_ID

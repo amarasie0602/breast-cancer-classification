@@ -26,6 +26,10 @@ def test_evaluate_binary_checkpoint_reports_full_metric_set(
     for key in ("accuracy", "precision", "recall", "f1", "sensitivity", "specificity"):
         assert 0.0 <= metrics[key] <= 1.0
     assert metrics["confusion_matrix"].shape == (2, 2)
+    low, high = metrics["patient_sensitivity_ci95"]
+    assert low <= metrics["patient_sensitivity"] <= high
+    spec_low, spec_high = metrics["patient_specificity_ci95"]
+    assert spec_low <= metrics["patient_specificity"] <= spec_high
 
 
 def test_evaluate_subtype_checkpoint_reports_per_class_metrics(

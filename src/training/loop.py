@@ -1,6 +1,6 @@
 """Training and evaluation loops."""
 
-from typing import Dict
+from typing import Dict, Sequence
 
 import torch
 from torch import nn
@@ -13,6 +13,7 @@ from src.training.metrics import (
     precision_recall_f1,
     sensitivity_specificity,
 )
+from src.training.patient_metrics import patient_sensitivity_specificity
 
 
 def train_one_epoch(
@@ -39,7 +40,13 @@ def train_one_epoch(
 
 
 @torch.no_grad()
-def evaluate(model: nn.Module, dataloader: DataLoader, criterion: nn.Module, device: str) -> Dict[str, float]:
+def evaluate(
+    model: nn.Module,
+    dataloader: DataLoader,
+    criterion: nn.Module,
+    device: str,
+    patient_ids: Sequence[str] | None = None,
+) -> Dict[str, float]:
     if len(dataloader.dataset) == 0:
         raise ValueError("evaluate received an empty dataset")
 
@@ -65,7 +72,7 @@ def evaluate(model: nn.Module, dataloader: DataLoader, criterion: nn.Module, dev
     sensitivity, specificity = sensitivity_specificity(preds, labels)
     cm = confusion_matrix(preds, labels, num_classes=2)
 
-    return {
+    metrics: Dict[str, float] = {
         "loss": total_loss / len(dataloader.dataset),
         "accuracy": accuracy(preds, labels),
         "precision": precision,
@@ -75,3 +82,13 @@ def evaluate(model: nn.Module, dataloader: DataLoader, criterion: nn.Module, dev
         "specificity": specificity,
         "confusion_matrix": cm,
     }
+    if patient_ids is not None:
+        if len(patient_ids) != len(labels):
+            raise ValueError(
+                f"patient_ids has length {len(patient_ids)} but evaluation saw {len(labels)} images. "
+                "The validation loader must not shuffle."
+            )
+        patient_sens, patient_spec = patient_sensitivity_specificity(patient_ids, preds, labels)
+        metrics["patient_sensitivity"] = patient_sens
+        metrics["patient_specificity"] = patient_spec
+    return metrics
